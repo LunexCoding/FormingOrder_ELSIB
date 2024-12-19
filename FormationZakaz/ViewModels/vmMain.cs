@@ -2713,7 +2713,15 @@ namespace FormationZakaz.ViewModels
 
         private List<izvv> _mGetApplicationData(string applicationNumber)
         {
-            return (from p in Model.db.izvv where p.nom == applicationNumber select p).ToList();
+            return (
+                from
+                    p in Model.db.izvv
+                where
+                    p.nom == applicationNumber
+                select
+                    p
+            )
+            .ToList();
         }
 
         private List<pril_zM> _mGenerateApplicationData(izvv record, List<decimal> nodesList)
@@ -2729,26 +2737,28 @@ namespace FormationZakaz.ViewModels
             var targetIsStr = record.is_ot.ToString().Trim().PadLeft(2, '0');
             var target = Convert.ToDecimal(targetStr + "," + targetIsStr);
 
-            applicationData.Add(new pril_zM
-            {
-                zak = (decimal)Model.pTbOrder,
-                nom = (decimal)Model.pTbNumber,
-                ko = (decimal)record.k_ob,
-                poz = (decimal)record.posit,
-                what = target,
-                kol = (decimal)record.quant,
-                kuda = node,
-                spec = (decimal)record.spec,
-                path = record.path,
-                km = (decimal)record.km,
-                norm = (decimal)record.norm,
-                dd = 0,
-                ksi = (decimal)record.ksi,
-                dat = Convert.ToDateTime(record.data),
-                norm_p = record.nom,
-                r_zag = record.r_zag,
-                k_det = (decimal)record.k_det
-            });
+            applicationData.Add(
+                new pril_zM
+                {
+                    zak = (decimal)Model.pTbOrder,
+                    nom = (decimal)Model.pTbNumber,
+                    ko = (decimal)record.k_ob,
+                    poz = (decimal)record.posit,
+                    what = target,
+                    kol = (decimal)record.quant,
+                    kuda = node,
+                    spec = (decimal)record.spec,
+                    path = record.path,
+                    km = (decimal)record.km,
+                    norm = (decimal)record.norm,
+                    dd = 0,
+                    ksi = (decimal)record.ksi,
+                    dat = Convert.ToDateTime(record.data),
+                    norm_p = record.nom,
+                    r_zag = record.r_zag,
+                    k_det = (decimal)record.k_det
+                }
+            );
 
             return applicationData;
         }
@@ -2790,10 +2800,17 @@ namespace FormationZakaz.ViewModels
 
         private List<pril_zM> _mValidateApplicationData(List<pril_zM> applicationsList, List<decimal> nodesList)
         {
-            return (from p in applicationsList
-                    join o in nodesList on p.what equals o
-                    where p.ko == 2
-                    select p).ToList();
+            return (
+                from
+                    application in applicationsList
+                join 
+                    node in nodesList on application.what equals node
+                where 
+                    application.ko == 2
+                select 
+                    application
+            )
+            .ToList();
         }
 
         private void _mLogApplicationErrors(List<pril_zM> errorsList)
@@ -2831,21 +2848,21 @@ namespace FormationZakaz.ViewModels
         /// <summary>
         /// Получает список позиций, которые не найдены в общем виде (OUT), для сверки.
         /// </summary>
-        /// <param name="list">Список позиций приложения для проверки.</param>
+        /// <param name="applicationsList">Список позиций приложения для проверки.</param>
         /// <param name="draft">Чертёж для сверки.</param>
         /// <returns>Строка с описанием позиций, которых нет в общем виде.</returns>
         private string _mGetPositionsNotInOut(List<pril_zM> applicationsList, decimal draft)
         {
-            var result = "";
+            string result = "";
 
             // Проверка каждой позиции, не относящейся к КО=1
-            foreach (var l in applicationsList.Where(z => z.ko != 1))
+            foreach (pril_zM application in applicationsList.Where(z => z.ko != 1))
             {
                 // Проверка наличия позиции в общем виде по чертежу и узлу
-                var _out = (from p in Model.db.@out where p.to == draft && p.across == l.kuda select p).ToList();
-                if (_out.Count == 0)
+                List<@out> outRecordsList = (from p in Model.db.@out where p.to == draft && p.across == application.kuda select p).ToList();
+                if (outRecordsList.Count == 0)
                 {
-                    result += "\nПозиция: " + l.poz + "\tЧертёж: " + (decimal)l.what + "\t Узел: " + (decimal)l.kuda + " - нет в общем виде.";
+                    result += "\nПозиция: " + application.poz + "\tЧертёж: " + (decimal)application.what + "\t Узел: " + (decimal)application.kuda + " - нет в общем виде.";
                 }
             }
 
@@ -2871,23 +2888,23 @@ namespace FormationZakaz.ViewModels
             {
                 // Логирование сообщения об отсутствии ошибок
                 AddTextToRtbInfo(DateTime.Now + " Сверка прошла - О Ш И Б О К   Н Е Т!", false);
-                AddTextToRtbInfo("*****", false);
+                AddTextToRtbInfo($"{'*' * 100}", false);
             }
         }
 
         /// <summary>
         /// Выполняет полную сверку позиций приложения с OUT, включая генерацию заголовка, проверку позиций и логирование результата.
         /// </summary>
-        /// <param name="list">Список позиций приложения для сверки.</param>
+        /// <param name="applicationsList">Список позиций приложения для сверки.</param>
         /// <param name="draft">Чертёж для сверки.</param>
         /// <returns>Результат сверки в виде строки.</returns>
-        public string _mPerformComparisonCheck(List<pril_zM> list, decimal draft)
+        public string _mPerformComparisonCheck(List<pril_zM> applicationsList, decimal draft)
         {
             var str = _mGenerateComparisonHeader();
             AddTextToRtbInfo(str, false); // Логируем заголовок 
 
             // Проверка позиций
-            str = _mGetPositionsNotInOut(list, draft);
+            str = _mGetPositionsNotInOut(applicationsList, draft);
 
             // Логирование результатов
             _mLogComparisonResult(str, draft);
@@ -2906,7 +2923,14 @@ namespace FormationZakaz.ViewModels
         /// <returns>Список уникальных значений kuda (node/узел) для переменных частей.</returns>
         private List<decimal>_mGetVariableParts(List<complect> kitsList)
         {
-            return (from p in kitsList where p.@group == 2 select p.kuda).Distinct().ToList();
+            return (
+                from
+                    kit in kitsList
+                where 
+                    kit.@group == 2 select kit.kuda
+            )
+            .Distinct()
+            .ToList();
         }
 
         /// <summary>
@@ -2926,30 +2950,43 @@ namespace FormationZakaz.ViewModels
         /// <param name="item">Постоянная часть, которая может быть добавлена в список.</param>
         private void _mAddConstantPartIfNotExist(List<complect> kitsList, complect item)
         {
-            var existing = kitsList.Count(p =>
-                p.format == item.format && p.posit == item.posit && p.what == item.what &&
-                p.kuda == item.kuda && p.quant == item.quant && p.ed == item.ed &&
-                p.group == item.group && p.spec == item.spec && p.ksi == item.ksi &&
-                p.path == item.path && p.izv == item.izv && p.dti == item.dti && p.tfl == item.tfl);
+            var existing = kitsList.Count(
+                kit =>
+                kit.format == item.format &&
+                kit.posit == item.posit &&
+                kit.what == item.what &&
+                kit.kuda == item.kuda &&
+                kit.quant == item.quant &&
+                kit.ed == item.ed &&
+                kit.group == item.group &&
+                kit.spec == item.spec &&
+                kit.ksi == item.ksi &&
+                kit.path == item.path &&
+                kit.izv == item.izv &&
+                kit.dti == item.dti &&
+                kit.tfl == item.tfl
+            );
 
             if (existing == 0)
             {
-                kitsList.Add(new complect
-                {
-                    format = item.format,
-                    posit = item.posit,
-                    what = item.what,
-                    kuda = item.kuda,
-                    quant = item.quant,
-                    ed = item.ed,
-                    group = item.group,
-                    spec = item.spec,
-                    ksi = item.ksi,
-                    path = item.path,
-                    izv = item.izv,
-                    dti = item.dti,
-                    tfl = item.tfl
-                });
+                kitsList.Add(
+                    new complect
+                    {
+                        format = item.format,
+                        posit = item.posit,
+                        what = item.what,
+                        kuda = item.kuda,
+                        quant = item.quant,
+                        ed = item.ed,
+                        group = item.group,
+                        spec = item.spec,
+                        ksi = item.ksi,
+                        path = item.path,
+                        izv = item.izv,
+                        dti = item.dti,
+                        tfl = item.tfl
+                    }
+                );
             }
         }
 
@@ -2984,203 +3021,6 @@ namespace FormationZakaz.ViewModels
         }
 
         #endregion new methods for replace GetComplList
-
-        #region new methods for replace ModifyComplect
-
-        void ModifyComplectNew(List<pril_zM> applicationsList, List<complect> kitsList, string draft)
-        {
-            int delCount = 0;
-            int addCount = 0;
-            int changeCount = 0;
-            List<string> queryQueue = new List<string>();
-
-            _mLogHeader(draft);
-
-            foreach (var application in applicationsList)
-            {
-                ProcessApplicationRecord(application, kitsList, ref delCount, ref addCount, ref changeCount, queryQueue);
-            }
-
-            _mExecuteQueriesToInsertKits(queryQueue);
-            LogFooter(kitsList.Count, delCount, addCount, changeCount);
-        }
-
-        void _mLogHeader(string draft)
-        {
-            AddTextToRtbInfo("________________", false);
-            AddTextToRtbInfo($"{DateTime.Now}\t Заказ/Номер: {Model.pTbOrder}/{Model.pTbNumber}\t Чертёж: {draft.Replace(',', '.')}", false);
-        }
-
-        void LogFooter(int kitsListCount, int delCount, int addCount, int changeCount)
-        {
-            AddTextToRtbInfo("________________", false);
-            AddTextToRtbInfo($"ko = 3 изменено: {changeCount}\tko = 2 удалено: {delCount}\tko = 1 добавлено: {addCount}", false);
-            AddTextToRtbInfo($"{DateTime.Now} CompList после модификации: {kitsListCount}", false);
-        }
-
-        void ProcessApplicationRecord(pril_zM application, List<complect> kitsList, ref int delCount, ref int addCount, ref int changeCount, List<string> queryQueue)
-        {
-            _mValidateApplicationRecord(application, kitsList);
-            _mCheckAndQueueInsertQueries(application, queryQueue);
-
-            var existingKit = kitsList
-                .OrderBy(kit => kit.spec)
-                .SingleOrDefault(
-                    kit =>
-                    kit.what == application.what &&
-                    kit.posit == application.poz &&
-                    kit.kuda == application.kuda &&
-                    kit.spec == application.spec &&
-                    kit.ksi == application.ksi
-                );
-
-            if (existingKit != null)
-            {
-                _mHandleExistingkit(application, kitsList, existingKit, ref delCount, ref changeCount);
-            }
-            else
-            {
-                ProcessNewOrGroupedEntry(application, kitsList, ref addCount, ref delCount, ref changeCount);
-            }
-        }
-
-        void _mValidateApplicationRecord(pril_zM pl, List<complect> compList)
-        {
-            var compl = compList.Find(z => z.kuda == pl.kuda);
-            if (compl != null)
-                pl.dd = compl.group > 0 ? 2 : 0;
-            else
-                AddTextToRtbInfo($"Узла: {pl.kuda} нет в compl.", true);
-        }
-
-        void _mCheckAndQueueInsertQueries(pril_zM pl, List<string> placeholderQueries)
-        {
-            var existingInDb = Model.db.complect.FirstOrDefault(p => p.what == pl.what);
-            if (pl.ko != 2 && existingInDb == null)
-            {
-                _mAddInsertKitQueryToQueue(pl, placeholderQueries);
-            }
-        }
-
-        void _mAddInsertKitQueryToQueue(pril_zM pl, List<string> placeholderQueries)
-        {
-            var query = "INSERT INTO complect values ('',{0},{1},9999,{2},0,0,{3},{4},{5},{6},{7},'')";
-            placeholderQueries.Add(string.Format(query, pl.poz, pl.what, pl.kol, pl.spec, pl.ksi, pl.path, "ДД" + pl.zak, "/" + pl.nom));
-
-            if (pl.spec == 2)
-            {
-                query = "INSERT INTO complect values ('',{0},{1},{1},1,0,0,1,{2},{3},{4},{5},'')";
-                placeholderQueries.Add(string.Format(query, pl.poz, pl.what, pl.what, pl.ksi, pl.path, "ДД" + pl.zak, "/" + pl.nom));
-            }
-        }
-
-        void _mExecuteQueriesToInsertKits(List<string> placeholderQueries)
-        {
-            foreach (var query in placeholderQueries)
-            {
-                Model.db.ExecuteStoreCommand(query);
-            }
-        }
-
-        void _mHandleExistingkit(pril_zM pl, List<complect> compList, complect res, ref int del, ref int change)
-        {
-            if (pl.ko == 2)
-            {
-                compList.Remove(res);
-                del++;
-            }
-            else if (pl.ko == 3)
-            {
-                res.quant = pl.kol;
-                res.spec = pl.spec;
-                res.path = pl.path;
-                change++;
-            }
-            else
-            {
-                AddTextToRtbInfo($"ДД\tПозиция:{pl.poz}\tЧертёж:{pl.what}\tУзел: {pl.kuda}\tРСП: {pl.spec}\tКСИ: {pl.ksi}\t ko = 1 уже есть в сomplect", true);
-            }
-        }
-
-        void ProcessNewOrGroupedEntry(pril_zM pl, List<complect> compList, ref int add, ref int del, ref int change)
-        {
-            if (pl.ko == 1)
-            {
-                _mAddNewKit(pl, compList, ref add);
-            }
-            else
-            {
-                _mProcessKitRecordBySpecifications(pl, compList, ref del, ref change);
-            }
-        }
-
-        void _mAddNewKit(pril_zM pl, List<complect> compList, ref int add)
-        {
-            var kudaStr = pl.kuda.ToString();
-            var ind = kudaStr.IndexOf(",");
-            var kudaEnd = ind >= 0 ? Convert.ToDecimal(kudaStr.Substring(ind + 1)) : 0;
-
-            compList.Add(new complect
-            {
-                posit = pl.poz,
-                kuda = pl.kuda,
-                what = pl.what,
-                quant = pl.kol,
-                spec = pl.spec,
-                path = pl.path,
-                ksi = pl.ksi,
-                group = pl.dd == 0 ? 0 : (kudaEnd > 0 ? 2 : 1)
-            });
-            add++;
-        }
-
-        void _mProcessKitRecordBySpecifications(pril_zM pl, List<complect> compList, ref int del, ref int change)
-        {
-            var intkuda = decimal.Truncate(pl.kuda);
-            var groupedEntries = compList.Where(p => p.kuda == pl.kuda && p.group == 2).ToList();
-
-            if (groupedEntries.Any())
-            {
-                _mHandleKitRecord(pl, compList, intkuda, ref del, ref change);
-            }
-            else
-            {
-                LogMissingEntry(pl);
-            }
-        }
-
-        void _mHandleKitRecord(pril_zM pl, List<complect> compList, decimal intkuda, ref int del, ref int change)
-        {
-            var fixedEntry = compList.OrderBy(z => z.spec)
-                                     .SingleOrDefault(z => z.what == pl.what && z.posit == pl.poz && z.kuda == intkuda && z.spec == pl.spec && z.ksi == pl.ksi && z.group == 1);
-
-            if (fixedEntry != null)
-            {
-                if (pl.ko == 2)
-                {
-                    compList.Remove(fixedEntry);
-                    del++;
-                }
-                else
-                {
-                    fixedEntry.quant = pl.kol;
-                    fixedEntry.spec = pl.spec;
-                    fixedEntry.path = pl.path;
-                    change++;
-                }
-            }
-            else
-            {
-                LogMissingEntry(pl);
-            }
-        }
-
-        void LogMissingEntry(pril_zM pl)
-        {
-            AddTextToRtbInfo($"ДД\tПозиция:{pl.poz}\tЧертёж: {pl.what}\tУзел: {pl.kuda}\tРСП: {pl.spec}\tКСИ: {pl.ksi}\t ko = {pl.ko} нет в сomplect", true);
-        }
-
-        #endregion new methods for replace ModifyComplect
 
         #endregion new methods for CalcOutPro
 

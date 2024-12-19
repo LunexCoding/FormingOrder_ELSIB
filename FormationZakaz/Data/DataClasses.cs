@@ -139,7 +139,7 @@ namespace FormationZakaz.Data
         public decimal k { get; set; }
         public string path { get; set; }
     }
-    class pril_zM
+    public class pril_zM
     {
         public decimal zak { get; set; }
         public decimal nom { get; set; }
