@@ -3,40 +3,147 @@
          xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
         xmlns:beh="clr-namespace:Fox;assembly=Fox"
         xmlns:local="clr-namespace:FormationZakaz.Data"
+        xmlns:tools="clr-namespace:FormationZakaz.Tools.Converters"
         x:Class="FormationZakaz.Views.Main"
-        Title="Формирование состава заказа (новая версия)" Height="600" Width="800" WindowStartupLocation="CenterScreen" Style="{DynamicResource ResourceKey=wind}">
+        Title="Формирование состава заказа (новая версия)" Height="600" Width="900" WindowStartupLocation="CenterScreen" Style="{DynamicResource ResourceKey=wind}">
+
+    <Window.Resources>
+        <!-- Конвертер для прогресс-бара -->
+        <tools:BoolToVisibilityForProgressBarConverter x:Key="BoolToVisibilityForProgressBarConverter" />
+
+        <!-- Конвертер для крестика и галочки -->
+        <tools:OrderStatusToVisibilityConverter x:Key="OrderStatusToVisibilityConverter" />
+    </Window.Resources>
+
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="70"/>
-            <RowDefinition Height="40*"/>
-            <RowDefinition Height="40*"/>
+            <RowDefinition Height="30"/>
+            <RowDefinition Height="80"/>
+            <RowDefinition Height="30"/>
+            <RowDefinition Height="20"/>
+            <RowDefinition Height="30*"/>
+            <RowDefinition Height="30*"/>
+            <RowDefinition Height="30*"/>
         </Grid.RowDefinitions>
-        <Label Content="Формирование состава заказа" HorizontalAlignment="Center" VerticalAlignment="Top" FontSize="14" FontWeight="Bold" Foreground="#FF2D2DF8" Margin="170,0,388,0" />
-        <GroupBox Grid.Row="0" Header="Данные:" Margin="0,20,0,0">
-            <Grid>
-                <Label Content="Заказ:" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="0,0,0,0"/>
-                <TextBox Text ="{Binding model.pTbOrder,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}" Name="tbOrder" ContextMenu="{x:Null}" Margin="42,0,0,5" Width="40" Height="22" HorizontalAlignment="Left" VerticalAlignment="Bottom" MaxLength="4" TabIndex="0" local:FocusExtension.IsFocused="{Binding model.pIsFocusedOrder,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}" beh:TextBoxBehavior.SelectAllTextOnFocus="True">
-                    <TextBox.InputBindings>
-                        <KeyBinding Key="Enter" Command="{Binding pFocusNum}"/>
-                        <KeyBinding Key="Tab" Command="{Binding pFocusNum}"/>
-                    </TextBox.InputBindings>
-                </TextBox>
-                <Label Content="Номер:" Margin="90,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Bottom"/>
-                <TextBox Text="{Binding model.pTbNumber,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}" Name="tbNumber"  ContextMenu="{x:Null}" Margin="137,0,0,5" Width="30" Height="22" HorizontalAlignment="Left" VerticalAlignment="Bottom" MaxLength="3" TabIndex="1" local:FocusExtension.IsFocused="{Binding model.pIsFocusedNum,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}" beh:TextBoxBehavior.SelectAllTextOnFocus="True">
-                    <TextBox.InputBindings>
-                        <KeyBinding Key="Enter" Command="{Binding pFocusCalc}"/>
-                        <KeyBinding Key="Tab" Command="{Binding pFocusCalc}"/>
-                    </TextBox.InputBindings>
-                </TextBox>
-                <Button Content="Расчёт" Margin="180,0,0,5" Name="btnCalc" Width="72" Height="22" HorizontalAlignment="Left" VerticalAlignment="Bottom" TabIndex="2" Command="{Binding pBtnCalc}"  IsEnabled="{Binding model.pEnCalc,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}" local:FocusExtension.IsFocused="{Binding model.pIsFocusedCalc,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}"/>
-                <Button Content="{Binding model.pContWrite,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}"  Margin="261,0,0,5" Name="btnWrite" Width="150" Height="22" HorizontalAlignment="Left" VerticalAlignment="Bottom" TabIndex="3" Command="{Binding pBtnWrite}" IsEnabled="{Binding model.pEnWrite,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}" local:FocusExtension.IsFocused="{Binding model.pIsFocusedWrite,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}" Foreground="{Binding model.pWrBG,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}" FontWeight="Bold"/>
-                <Button Content="Новый" IsEnabled="{Binding model.pEnNew,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}"  Margin="422,0,0,5" Name="btnNew" Width="70" Height="22" HorizontalAlignment="Left" VerticalAlignment="Bottom" TabIndex="4" VerticalContentAlignment="Top" Command="{Binding pBtnNew}" local:FocusExtension.IsFocused="{Binding model.pIsFocusedNew,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}"/>
-                <Button Content="Печать" IsEnabled="{Binding model.pEnPrint,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}"  Margin="0,0,0,5" Name="btnPrint" Width="100" Height="22" HorizontalAlignment="Right" VerticalAlignment="Bottom" TabIndex="5" Command="{Binding pBtnPrint}"/>
-                <Button Content="Excel" Height="22" HorizontalAlignment="Left" Margin="577,0,0,0" Name="button1" VerticalAlignment="Top" Width="70" Command="{Binding pExcel}"/>
-                <Button Content="ДД исх." Height="22" HorizontalAlignment="Left" Margin="502,0,0,0" Name="button2" VerticalAlignment="Top" Width="64" Command="{Binding ppDDisx}"/>
-            </Grid>
-        </GroupBox>
-        <GroupBox Header="Лог:" Grid.Row="1">
+
+        <Label Grid.Row="0" Content="Формирование состава заказа" HorizontalAlignment="Center" VerticalAlignment="Top" FontSize="14" FontWeight="Bold" Foreground="#FF2D2DF8" Margin="170,0,388,0" />
+
+        <!-- Создаем Grid для размещения GroupBox -->
+        <Grid Grid.Row="1" Margin="10">
+            <!-- Определяем три равных столбца -->
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Первый GroupBox -->
+            <GroupBox Header="Работа с одним заказом:" Grid.Column="0" Margin="5" IsEnabled="{Binding model.pAccessCommandElementsForOneOrder}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Label Grid.Column="0" Margin="5 0 0 0" Content="Заказ:" HorizontalAlignment="Left" VerticalAlignment="Bottom" />
+                    <TextBox Grid.Column="1" Margin="5 0 0 0" Text ="{Binding model.pTbOrder,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}" Name="tbOrder" ContextMenu="{x:Null}" Width="40" Height="22" HorizontalAlignment="Left" VerticalAlignment="Bottom" MaxLength="4" TabIndex="0" local:FocusExtension.IsFocused="{Binding model.pIsFocusedOrder,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}" beh:TextBoxBehavior.SelectAllTextOnFocus="True">
+                        <TextBox.InputBindings>
+                            <KeyBinding Key="Enter" Command="{Binding pFocusNum}"/>
+                            <KeyBinding Key="Tab" Command="{Binding pFocusNum}"/>
+                        </TextBox.InputBindings>
+                    </TextBox>
+                    <Label Grid.Column="2" Margin="5 0 0 0" Content="Номер:" HorizontalAlignment="Left" VerticalAlignment="Bottom"/>
+                    <TextBox Grid.Column="3" Margin="5 0 0 0" Text="{Binding model.pTbNumber,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}" Name="tbNumber"  ContextMenu="{x:Null}" Width="30" Height="22" HorizontalAlignment="Left" VerticalAlignment="Bottom" MaxLength="3" local:FocusExtension.IsFocused="{Binding model.pIsFocusedNum,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}" beh:TextBoxBehavior.SelectAllTextOnFocus="True">
+                        <TextBox.InputBindings>
+                            <KeyBinding Key="Enter" Command="{Binding pFocusCalc}"/>
+                            <KeyBinding Key="Tab" Command="{Binding pFocusCalc}"/>
+                        </TextBox.InputBindings>
+                    </TextBox>
+                    <Button Grid.Column="4" Margin="5 0 0 0" Content="Расчёт" Name="btnCalc" Width="72" Height="22" HorizontalAlignment="Left" VerticalAlignment="Bottom" Command="{Binding pBtnCalc}"  IsEnabled="{Binding model.pEnCalc,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}" local:FocusExtension.IsFocused="{Binding model.pIsFocusedCalc,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}"/>
+                    <Button Grid.Column="5" Margin="5 0 0 0" Content="{Binding model.pContWrite,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}" Name="btnWrite" Width="150" Height="22" HorizontalAlignment="Left" VerticalAlignment="Bottom" TabIndex="3" Command="{Binding pBtnWrite}" IsEnabled="{Binding model.pEnWrite,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}" local:FocusExtension.IsFocused="{Binding model.pIsFocusedWrite,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}" Foreground="{Binding model.pWrBG,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}" FontWeight="Bold"/>
+                    <Button Grid.Column="6" Margin="5 0 0 0" Content="Новый" Height="22" HorizontalAlignment="Left" VerticalAlignment="Bottom" IsEnabled="{Binding model.pEnNew,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}" Name="btnNew" Width="70" Command="{Binding pBtnNew}" local:FocusExtension.IsFocused="{Binding model.pIsFocusedNew,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}"/>
+                    <Button Grid.Column="7" Margin="5 0 0 0" Content="Excel" HorizontalAlignment="Left" VerticalAlignment="Bottom" Name="button1" Height="22" Width="70" Command="{Binding pExcel}"/>
+                    <Button Grid.Column="8" Content="ДД исх." Margin="5 0 0 0" HorizontalAlignment="Left" VerticalAlignment="Bottom" Height="22" Name="button2" Width="64" Command="{Binding ppDDisx}"/>
+                    <Button Grid.Column="9" Content="Печать"  IsEnabled="{Binding model.pEnPrint,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}" Margin="5 0 0 0"  Name="btnPrint" Width="100" Height="22" HorizontalAlignment="Right" VerticalAlignment="Bottom" Command="{Binding pBtnPrint}"/>
+                </Grid>
+            </GroupBox>
+
+            <!-- Второй GroupBox -->
+            <GroupBox Header="Работа со списком заказов:" Grid.Column="1" Margin="5" IsEnabled="{Binding model.pAccessCommandElementsForOrders}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0" Content="Обновить" Command="{Binding pLoadOrders}" HorizontalAlignment="Left" VerticalAlignment="Bottom" Height="22"/>
+                    <Button Grid.Column="1" Margin="5 0 0 0" Content="Расчитать все" Command="{Binding pCalcAllOrders}" HorizontalAlignment="Left" VerticalAlignment="Bottom" Height="22"/>
+                </Grid>
+            </GroupBox>
+
+        </Grid>
+
+        <CheckBox Grid.Row="3"
+                  Content="Выбрать все"
+                  IsChecked="{Binding model.pIsAllSelected, Mode=TwoWay}" 
+                  HorizontalAlignment="Left" VerticalAlignment="Top" Margin="15 0 0 0"/>
+
+        <DataGrid Grid.Row="4"
+                  x:Name="ItemsList"
+                  Margin="10"
+                  SelectionMode="Single"
+                  AutoGenerateColumns="False"
+                  ItemsSource="{Binding model.pOrders}"
+                  SelectedItem="{Binding model.pSelectedOrder, Mode=TwoWay}"
+                  IsReadOnly="True">
+
+            <DataGrid.Columns>
+                <DataGridTemplateColumn Width="50">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="Заказ" Binding="{Binding OrderID}" Width="*" />
+                <DataGridTextColumn Header="Номер" Binding="{Binding Number}" Width="*" />
+                <DataGridTextColumn Header="Имя" Binding="{Binding Name}" Width="*" />
+                <DataGridTextColumn Header="Чертеж" Binding="{Binding Draft}" Width="*" />
+                <DataGridTextColumn Header="Осн. заказ" Binding="{Binding MainOrderID}" Width="*" />
+                <DataGridTextColumn Header="Номер осн. заказа" Binding="{Binding MainOrderNumber}" Width="*" />
+
+                <DataGridTemplateColumn Header="Статус" Width="*">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <!-- Галочка, если Status = Completed -->
+                                <Path Data="M0,10 L10,20 L20,0" Stroke="Green" StrokeThickness="2"
+                      Visibility="{Binding pStatus, Converter={StaticResource OrderStatusToVisibilityConverter}, ConverterParameter=COMPLECTED}" />
+
+                                <!-- Крестик, если Status = NotCompleted -->
+                                <Path Data="M0,0 L20,20 M0,20 L20,0" Stroke="Red" StrokeThickness="2"
+                      Visibility="{Binding pStatus, Converter={StaticResource OrderStatusToVisibilityConverter}, ConverterParameter=NOT_COMPLECTED}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <ProgressBar Grid.Row="2" 
+                 Height="20" 
+                 Margin="10" 
+                 Minimum="0" 
+                 Maximum="100" 
+                 Value="{Binding model.pProgress}" 
+                 Visibility="{Binding model.pIsProgressVisible, Converter={StaticResource BoolToVisibilityForProgressBarConverter}}" />
+        
+        <GroupBox Header="Лог:" Grid.Row="5">
             <!--<RichTextBox Name="rtbInfo" IsReadOnly="True" VerticalScrollBarVisibility="Auto" />-->
             <xctk:RichTextBox x:Name="_richTextBox" Grid.Row="1"  BorderBrush="Gray" Padding="10"
                                           Text="{Binding model.pTextBlock,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}" 
@@ -53,8 +160,8 @@
 
             </xctk:RichTextBox>
         </GroupBox>
-        <GroupBox Header="{Binding model.pgbResult,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}" Grid.Row="2" Name="gbResult">
-            <DataGrid Grid.Row="2" Name="dgResult" AutoGenerateColumns="False" IsReadOnly="True" CanUserSortColumns="True" ItemsSource="{Binding model.pListOutPro,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}">
+        <GroupBox Header="{Binding model.pgbResult,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}" Grid.Row="6" Name="gbResult">
+            <DataGrid Grid.Row="4" Name="dgResult" AutoGenerateColumns="False" IsReadOnly="True" CanUserSortColumns="True" ItemsSource="{Binding model.pListOutPro,UpdateSourceTrigger=PropertyChanged,Mode=TwoWay}">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Заказ" Binding="{Binding zakaz}"/>
                     <DataGridTextColumn Header="№" Binding="{Binding nom}"/>

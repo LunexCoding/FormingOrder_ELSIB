@@ -1,7 +1,7 @@
 ﻿namespace FormationZakaz.Views
 {
     /// <summary>
-    /// Логика взаимодействия для Main.xaml
+    /// Логика взаимодействия для Main.xamls
     /// </summary>
     public partial class Main
     {
@@ -11,3 +11,4 @@
         }
     }
 }
+

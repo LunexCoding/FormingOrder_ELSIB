@@ -262,4 +262,11 @@ namespace FormationZakaz.Data
             ((FrameworkElement)sender).SetValue(IsFocusedProperty, false);
         }
     }
+
+    public enum CommandStatus
+    {
+        EXECUTED,
+        FAILED
+    }
+
 }

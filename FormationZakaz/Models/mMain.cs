@@ -3,6 +3,8 @@ using System.Linq;
 //
 using Fox;
 using FormationZakaz.Data;
+using System.Collections.ObjectModel;
+using System;
 //using System.Windows.Media;
 //
 namespace FormationZakaz.Models
@@ -31,6 +33,8 @@ namespace FormationZakaz.Models
         public List<complect> listParts;
         public List<rr> rr_;
         public List<tarift> tf_;
+
+        private const string ResultMsg = "Результат :";
 
         #endregion
 
@@ -287,6 +291,110 @@ namespace FormationZakaz.Models
                 }
             }
         }
+
+
+        private ObservableCollection<Order> _orders;
+        public ObservableCollection<Order> pOrders
+        {
+            get { return _orders; }
+            set
+            {
+                if (_orders != value)
+                {
+                    _orders = value;
+                    OnPropertyChanged(nameof(pOrders));
+                }
+            }
+        }
+
+        private Order _selectedOrder;
+        public Order pSelectedOrder
+        {
+            get => _selectedOrder;
+            set
+            {
+                if (_selectedOrder != value)
+                {
+                    _selectedOrder = value;
+                    OnPropertyChanged(nameof(pSelectedOrder));
+                    UpdateOrderData();
+                    UpdateLog();
+                    UpdateResult();
+                }
+            }
+        }
+
+        private bool _isProgressVisible;
+        public bool pIsProgressVisible
+        {
+            get { return _isProgressVisible; }
+            set
+            {
+                if (_isProgressVisible != value)
+                {
+                    _isProgressVisible = value;
+                    OnPropertyChanged(nameof(pIsProgressVisible));
+                }
+            }
+        }
+
+        private double _progress;
+        public double pProgress
+        {
+            get { return _progress; }
+            set
+            {
+                if (_progress != value)
+                {
+                    _progress = value;
+                    OnPropertyChanged(nameof(pProgress));
+                }
+            }
+        }
+
+
+        private bool _accessCommandElementsForOneOrder;
+        public bool pAccessCommandElementsForOneOrder
+        {
+            get { return _accessCommandElementsForOneOrder; }
+            set
+            {
+                if (_accessCommandElementsForOneOrder != value)
+                {
+                    _accessCommandElementsForOneOrder = value;
+                    OnPropertyChanged(nameof(pAccessCommandElementsForOneOrder));
+                }
+            }
+        }
+
+        private bool _accessCommandElementsForOrders;
+        public bool pAccessCommandElementsForOrders
+        {
+            get { return _accessCommandElementsForOrders; }
+            set
+            {
+                if (_accessCommandElementsForOrders != value)
+                {
+                    _accessCommandElementsForOrders = value;
+                    OnPropertyChanged(nameof(pAccessCommandElementsForOrders));
+                }
+            }
+        }
+        
+        private bool _isAllSelectedOrders;
+        public bool pIsAllSelected
+        {
+            get { return _isAllSelectedOrders; }
+            set
+            {
+                if (_isAllSelectedOrders != value)
+                {
+                    _isAllSelectedOrders = value;
+                    OnPropertyChanged(nameof(pIsAllSelected));
+                }
+            }
+        }
+
         #endregion
 
         #region Методы
@@ -311,7 +419,8 @@ namespace FormationZakaz.Models
             gbResult = "Результат:";
             WrBG = "Gray";
             pContWrite = "Запись в OUTPRO";
-            //
+
+            pOrders = new ObservableCollection<Order>();
            
             //
             GetList();
@@ -338,6 +447,111 @@ namespace FormationZakaz.Models
             }
                  rr_ = (from p in db.rr select p).ToList();
                   tf_ = (from p in db.tarift select p).ToList();
+        }
+
+        private void UpdateLog()
+        {
+            if (pSelectedOrder != null)
+            {
+                pTextBlock = pSelectedOrder.Log;
+            }
+        }
+
+        private void UpdateResult()
+        {
+            if (pSelectedOrder != null)
+            {
+                pListOutPro = pSelectedOrder.Result;
+                pgbResult = ResultMsg + " " + pSelectedOrder.CountResult;
+            }
+        }
+
+        private void UpdateOrderData()
+        {
+            if (pSelectedOrder != null)
+            {
+                pTbOrder = pSelectedOrder.OrderID;
+                pTbNumber = pSelectedOrder.Number;
+            }
+        }
+
+        public List<Order> mGetOrders(DateTime firstDate, DateTime secondDate)
+        {
+            return db.pl_god
+            .Where(res => res.data >= firstDate && res.data <= secondDate)
+            .Select(res => new Order
+                {
+                    OrderID = res.zakaz,
+                    Number = res.nom,
+                    Name = res.name,
+                    Draft = res.draft,
+                    MainOrderID = res.zak_os,
+                    MainOrderNumber = res.nom_os,
+                    ReleaseDate = res.dvippl,
+                    ProductType = res.tip,
+                    FactoryServices = res.typ,
+                    Author = res.avtor,
+                    Application = res.npril,
+                    Log = String.Empty,
+                    pStatus = OrderStatus.DEFAULT,
+                    IsSelected = false
+                 }
+            )
+            .ToList();
+        }
+
+        public List<Order> mGetSelectedOrders()
+        {
+            return pOrders
+                .Where(order => order.IsSelected == true)
+                .ToList();
+        }
+
+        public void mUpdateOrders(List<Order> orders) 
+        { 
+            // Проверка на null
+            if (orders == null) 
+            { 
+                return; 
+            } 
+ 
+            foreach (var order in orders) 
+            { 
+                // Проверяем наличие записи в outpro
+                outpro row = _mFindOrderInOutpro(order); 
+ 
+                // Если запись найдена, пропускаем заказ
+                if (row != null) 
+                { 
+                    continue; 
+                } 
+ 
+                // Ищем заказ в pOrders
+                var existingOrder = pOrders.FirstOrDefault(o => o.OrderID == order.OrderID && o.Number == order.Number); 
+ 
+                if (existingOrder == null) 
+                { 
+                    // Если заказа нет в pOrders, добавляем его
+                    pOrders.Add(order); 
+                    OnPropertyChanged(nameof(pOrders)); 
+                } 
+                else if (existingOrder.pStatus == OrderStatus.COMPLECTED) 
+                { 
+                    // Если заказ найден и статус Completed, удаляем его из pOrders
+                    pOrders.Remove(existingOrder); 
+                    OnPropertyChanged(nameof(pOrders)); 
+                } 
+            } 
+        }
+
+        private outpro _mFindOrderInOutpro(Order order)
+        {
+            return db.outpro
+                .Where(outpro =>
+                    outpro.nom == order.Number &&
+                    outpro.zakaz == order.OrderID
+                )
+                .FirstOrDefault();
         }
         #endregion
     }

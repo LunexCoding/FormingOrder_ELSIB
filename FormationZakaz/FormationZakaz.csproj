@@ -55,14 +55,21 @@
     <ApplicationIcon>A08.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="EPPlus">
-      <HintPath>..\..\..\DLLs\EPPlus.dll</HintPath>
+    <Reference Include="EPPlus, Version=7.5.2.0, Culture=neutral, PublicKeyToken=ea159fdaa78159a1, processorArchitecture=MSIL">
+      <HintPath>..\packages\EPPlus.7.5.2\lib\net35\EPPlus.dll</HintPath>
+    </Reference>
+    <Reference Include="EPPlus.Interfaces, Version=7.5.0.0, Culture=neutral, PublicKeyToken=a694d7f3b0907a61, processorArchitecture=MSIL">
+      <HintPath>..\packages\EPPlus.Interfaces.7.5.0\lib\net35\EPPlus.Interfaces.dll</HintPath>
+    </Reference>
+    <Reference Include="EPPlus.System.Drawing, Version=7.5.0.0, Culture=neutral, PublicKeyToken=2308d35469c9bac0, processorArchitecture=MSIL">
+      <HintPath>..\packages\EPPlus.System.Drawing.7.5.0\lib\net35\EPPlus.System.Drawing.dll</HintPath>
     </Reference>
     <Reference Include="Fox, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>d:\MyDocs\DLLs\Fox.dll</HintPath>
       <SpecificVersion>False</SpecificVersion>
     </Reference>
     <Reference Include="System" />
+    <Reference Include="System.configuration" />
     <Reference Include="System.Data" />
     <Reference Include="System.Data.Entity" />
     <Reference Include="System.Drawing" />
@@ -99,7 +106,10 @@
       <DesignTime>True</DesignTime>
       <DependentUpon>FOXModel.edmx</DependentUpon>
     </Compile>
+    <Compile Include="Data\Order.cs" />
     <Compile Include="Models\mMain.cs" />
+    <Compile Include="Tools\Converters\BoolToVisibilityForProgressBarConverter.cs" />
+    <Compile Include="Tools\Converters\OrderStatusToVisibilityConverter.cs" />
     <Compile Include="ViewModels\vmMain.cs" />
     <Compile Include="Views\Main.xaml.cs">
       <DependentUpon>Main.xaml</DependentUpon>
@@ -128,6 +138,7 @@
       <Generator>EntityModelCodeGenerator</Generator>
       <LastGenOutput>FOXModel.Designer.cs</LastGenOutput>
     </EntityDeploy>
+    <None Include="packages.config" />
     <None Include="Properties\DataSources\FormationZakaz.Data.FOXEntities.datasource" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>

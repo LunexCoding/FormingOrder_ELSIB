@@ -15,6 +15,8 @@ using System.Xml.Linq;
 using System.Diagnostics;
 using System.Windows.Threading;
 using OfficeOpenXml;
+using System.Collections.ObjectModel;
+using System.Windows.Controls;
 //
 namespace FormationZakaz.ViewModels
 {
@@ -33,6 +35,9 @@ namespace FormationZakaz.ViewModels
         /// Переменная Model
         /// </summary>
         public mMain Model;
+        private BackgroundWorker _worker;
+
+        private const string ResultMsg = "Результат :";
         //
         // Переменная для свойства команды
         //
@@ -42,10 +47,7 @@ namespace FormationZakaz.ViewModels
 
         #region Свойства
 
-        //
-        // Свойство команды
-        //
-        
+
         CommandBase pDDisx;
 
         public CommandBase ppDDisx
@@ -57,7 +59,7 @@ namespace FormationZakaz.ViewModels
 
         public CommandBase pBtnCalc
         {
-            get { return BtnCalc ?? (BtnCalc = new CommandBase(mBtnCalc)); }
+            get { return BtnCalc ?? (BtnCalc = new CommandBase(_mBtnCalcWithFlag)); }
         }
 
         
@@ -102,7 +104,21 @@ namespace FormationZakaz.ViewModels
         {
             get { return Excel ?? (Excel = new CommandBase(mExcel)); }
         }
-      
+
+
+        private CommandBase _LoadOrders;
+        public CommandBase pLoadOrders
+        {
+            get { return _LoadOrders ?? (_LoadOrders = new CommandBase(_mLoadOrders)); }
+        }
+
+
+        private CommandBase _CalcAllOrders;
+        public CommandBase pCalcAllOrders
+        {
+            get { return _CalcAllOrders ?? (_CalcAllOrders = new CommandBase(_mStartCalculation)); }
+        }
+
         #endregion
 
         #region Методы
@@ -112,7 +128,11 @@ namespace FormationZakaz.ViewModels
         /// </summary>
         public vmMain()
         {
-
+            _worker = new BackgroundWorker();
+            _worker.WorkerReportsProgress = true;
+            _worker.DoWork += _mWorker_DoWork;
+            _worker.ProgressChanged += _mWorker_ProgressChanged;
+            _worker.RunWorkerCompleted += _mWorker_RunWorkerCompleted;
         }
         /// <summary>
         /// Обработчик события загрузки View
@@ -128,8 +148,12 @@ namespace FormationZakaz.ViewModels
             Model.pEnNew = true;
             Model.pEnWrite = false;
             Model.pEnPrint = false;
-            Model.pgbResult = "Результат :";
+            Model.pgbResult = ResultMsg;
             Model.pEnCalc = false;
+            Model.pIsProgressVisible = false;
+            Model.pAccessCommandElementsForOneOrder = true;
+            Model.pAccessCommandElementsForOrders = true;
+
             System.Drawing.Size resolution = System.Windows.Forms.Screen.PrimaryScreen.Bounds.Size;
             if (resolution.Height * 2 / 3 > 600)
             {
@@ -138,6 +162,8 @@ namespace FormationZakaz.ViewModels
                 View.Left = View.Left - (resolution.Width * 2 / 3 - 800) / 2;
                 View.Top = View.Top - (View.Height - 600) / 2;
             }
+
+            _mLoadOrders();
 
         }
 
@@ -157,6 +183,10 @@ namespace FormationZakaz.ViewModels
             {
                 //Model.pCalcBG = "LightGray";
                 Model.pEnCalc = false;
+            }
+            if ( _eventArgs.PropertyName == "pIsAllSelected")
+            {
+                _mSetAllOrdersSelection(Model.pIsAllSelected);
             }
         }
 
@@ -240,8 +270,9 @@ namespace FormationZakaz.ViewModels
         /// Кнопка Расчет
         /// </summary>
         // +
-        public void mBtnCalc()
+        public CommandStatus mBtnCalc(bool showMessageFlag)
         {
+            CommandStatus status;
             Model.pTextBlock = "";// View.rtbInfo.Document.Blocks.Clear();
                Model.pListOutPro = new List<outpro>(); // View.dgResult.Items.Clear();
                Model.ReSetVars();
@@ -251,7 +282,7 @@ namespace FormationZakaz.ViewModels
                            
                             Model.pWrBG = "Black";
                            
-                            CalcOutPro();
+                            status = CalcOutPro(showMessageFlag);
                             //
                             if (Model.pEnWrite == true)
                                 Model.pEnWrite = true;// View.btnWrite.IsEnabled = true;
@@ -261,8 +292,19 @@ namespace FormationZakaz.ViewModels
                             Model.pIsFocusedWrite = true;//  View.btnWrite.Focus();
                             Model.pEnNew = true;// View.btnNew.IsEnabled = true;
                             Model.pEnPrint = true;// View.btnPrint.IsEnabled = true;
+                            
                         }
-                        else MessageBox.Show("Не заполнено поле Заказ и/или Номер!", "Внимание!", MessageBoxButton.OK, MessageBoxImage.Warning);
+                
+            else
+            {
+                if (showMessageFlag)
+                {
+                    MessageBox.Show("Не заполнено поле Заказ и/или Номер!", "Внимание!", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+                status = CommandStatus.FAILED;
+            }
+            return status;
+                
         }
        
         /// <summary>
@@ -271,78 +313,80 @@ namespace FormationZakaz.ViewModels
         // +
         public void mBtnWrite()
         {
-            if (Model.pListOutPro.Count > 0)
-            {
-                //********************* проверим маршрут
-                bool flyes = true;
-                List<rpathdim> pth = new List<rpathdim>();
-                int mcoun = 0;
-                string cxx = "";
-                var rrt = (from p in Model.db.rr
-                           //where p.cexzp == "ro"
-                           select new
-                           {
-                               cex = p.cex
-                           }).ToList();
-                var Zcompo = (from p in Model.pListOutPro
-                              select new
-                              {
-                                  zakaz = p.zakaz,
-                                  nom = p.nom,
-                                  what = p.draft,
-                                  kuda = p.across,
-                                  path = p.path,
-                                  nom_nar = p.nom_nar
-                              }).ToList();
-                // pZnoincomp = new List<noOutpro>();
-                foreach (var v in Zcompo)
-                {
-                    try
-                    {
-                        pth = rpath(v.path, out mcoun); //разобранный список маршрутп
-                        for (int i = 0; i < mcoun; i++)
-                        {
+            Console.WriteLine("Lock");
 
-                            cxx = pth[i].mpath;
-                            var yy = rrt.FirstOrDefault(p => p.cex == cxx);
-                            if (yy == null)
-                            {
-                                AddTextToRtbInfo("Ошибка: Чертеж Что = " + v.what.ToString().Replace(',', '.') + " в узле =" + v.kuda.ToString().Replace(',', '.') + " \n    в маршруте "+v.path+ " ошибка \n см. цех "+cxx, true);
-                                flyes = false;
-                            }
+        //    if (Model.pListOutPro.Count > 0)
+        //    {
+        //        //********************* проверим маршрут
+        //        bool flyes = true;
+        //        List<rpathdim> pth = new List<rpathdim>();
+        //        int mcoun = 0;
+        //        string cxx = "";
+        //        var rrt = (from p in Model.db.rr
+        //                       //where p.cexzp == "ro"
+        //                   select new
+        //                   {
+        //                       cex = p.cex
+        //                   }).ToList();
+        //        var Zcompo = (from p in Model.pListOutPro
+        //                      select new
+        //                      {
+        //                          zakaz = p.zakaz,
+        //                          nom = p.nom,
+        //                          what = p.draft,
+        //                          kuda = p.across,
+        //                          path = p.path,
+        //                          nom_nar = p.nom_nar
+        //                      }).ToList();
+        //        // pZnoincomp = new List<noOutpro>();
+        //        foreach (var v in Zcompo)
+        //        {
+        //            try
+        //            {
+        //                pth = rpath(v.path, out mcoun); //разобранный список маршрутп
+        //                for (int i = 0; i < mcoun; i++)
+        //                {
 
-                        }
-                    }
-                    catch
-                    {
-                        AddTextToRtbInfo("Ошибка: Чертеж Что =" + v.what.ToString().Replace(',', '.') + " в узле =" + v.kuda.ToString().Replace(',', '.') + " \n    в маршруте " + v.path + " ошибка \n см. цех " + cxx, true);
-                        flyes = false;
-                    }
-                }
+        //                    cxx = pth[i].mpath;
+        //                    var yy = rrt.FirstOrDefault(p => p.cex == cxx);
+        //                    if (yy == null)
+        //                    {
+        //                        AddTextToRtbInfo("Ошибка: Чертеж Что = " + v.what.ToString().Replace(',', '.') + " в узле =" + v.kuda.ToString().Replace(',', '.') + " \n    в маршруте " + v.path + " ошибка \n см. цех " + cxx, true);
+        //                        flyes = false;
+        //                    }
 
-                if (flyes)
-                {
-                    if (MessageBox.Show("Действительно выполнить запись в базу?", "Внимание!", MessageBoxButton.YesNo).ToString() == "Yes")
-                    {
-                        WriteFromPrilzTmpToPrilz();
-                        //
-                        if (Model.replaces > 0) WriteZ_td7AndOutBnsi();
-                        else WriteIntoOutproAndPlgod();
-                        //
-                        Model.pWrBG = "Green";//View.btnWrite.Background = new SolidColorBrush(Colors.Green);
-                        //
-                        Model.pEnNew = true;// View.btnNew.IsEnabled = true;
-                        Model.pIsFocusedNew = true;//View.btnNew.Focus();
-                    }
-                }
-                else
-                {
-                    MessageBox.Show("Запись не произведена - в маршрутах ошибки!", "Внимание!", MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
-                //**************************
-            }
-            else
-            MessageBox.Show("Расчёт не выполнен!", "Внимание!", MessageBoxButton.OK, MessageBoxImage.Warning);
+        //                }
+        //            }
+        //            catch
+        //            {
+        //                AddTextToRtbInfo("Ошибка: Чертеж Что =" + v.what.ToString().Replace(',', '.') + " в узле =" + v.kuda.ToString().Replace(',', '.') + " \n    в маршруте " + v.path + " ошибка \n см. цех " + cxx, true);
+        //                flyes = false;
+        //            }
+        //        }
+
+        //        if (flyes)
+        //        {
+        //            if (MessageBox.Show("Действительно выполнить запись в базу?", "Внимание!", MessageBoxButton.YesNo).ToString() == "Yes")
+        //            {
+        //                WriteFromPrilzTmpToPrilz();
+        //                //
+        //                if (Model.replaces > 0) WriteZ_td7AndOutBnsi();
+        //                else WriteIntoOutproAndPlgod();
+        //                //
+        //                Model.pWrBG = "Green";//View.btnWrite.Background = new SolidColorBrush(Colors.Green);
+        //                //
+        //                Model.pEnNew = true;// View.btnNew.IsEnabled = true;
+        //                Model.pIsFocusedNew = true;//View.btnNew.Focus();
+        //            }
+        //        }
+        //        else
+        //        {
+        //            MessageBox.Show("Запись не произведена - в маршрутах ошибки!", "Внимание!", MessageBoxButton.OK, MessageBoxImage.Warning);
+        //        }
+        //        //**************************
+        //    }
+        //    else
+        //        MessageBox.Show("Расчёт не выполнен!", "Внимание!", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
 
         public List<rpathdim> rpath(string lpath, out int mcount)
@@ -440,7 +484,7 @@ namespace FormationZakaz.ViewModels
             //
             Model.pListOutPro = new List<outpro>(); //View.dgResult.ItemsSource = null;
             //
-            Model.pgbResult = "Результат :";
+            Model.pgbResult = ResultMsg;
             Model.pEnCalc = false;// View.btnCalc.IsEnabled = true;
             Model.pEnWrite = false;// View.btnWrite.IsEnabled = false;
             Model.pWrBG = "Black"; //View.btnWrite.Background = null;
@@ -607,26 +651,43 @@ namespace FormationZakaz.ViewModels
         /// <summary>
         /// Расчет
         /// </summary>
-        void CalcOutPro()
+        public CommandStatus CalcOutPro(bool showMessageFlag)
         {
-        
+            CommandStatus status = CommandStatus.EXECUTED;
+            CommandStatus subStatus = CommandStatus.EXECUTED;
             decimal draft = 0;
             var notErr = true;
             //
        
             var _Outp=Model.db.outpro.FirstOrDefault(p=>p.zakaz==Model.pTbOrder && p.nom==Model.pTbNumber);
            
-                if( _Outp!=null)// есть заказ в outpro?
+            if ( _Outp!=null)// есть заказ в outpro?
             {
-                AddTextToRtbInfo("Заказ уже есть в OUTPRO.", true);
-                //
-                var res = MessageBox.Show("Заказ уже есть в OutPro. \nПродолжить расчёт?", "Внимание!", MessageBoxButton.YesNo, MessageBoxImage.Question);
-                //
-                notErr = (res.ToString() == "Yes");
-                Model.pEnWrite = false;
+                    AddTextToRtbInfo("Заказ уже есть в OUTPRO.", true);
+                    if (showMessageFlag)
+                    {
+                        var res = MessageBox.Show("Заказ уже есть в OutPro. \nПродолжить расчёт?", "Внимание!", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                        //
+                        notErr = (res.ToString() == "Yes");
+                        if (!notErr)
+                        {
+                            status = CommandStatus.FAILED;
+                        }
+                        Model.pEnWrite = false;
+                    }
+                    else
+                    {
+                        notErr = false;
+                        status = CommandStatus.FAILED;
+                }
             }
-                else
-                    Model.pEnWrite = true;
+            else
+            {
+                Model.pEnWrite = true;
+                
+            }
+                
+            
             //
             if (notErr)
             {
@@ -666,21 +727,33 @@ namespace FormationZakaz.ViewModels
                                 if (CheckOut(prilzList, draft) != "") // проверка на наличие изменяемых и удаляемых позиций приложения в OUT
                                 {
                                     //есть ошибки
-                                    Model.pWrBG = "Red";// View.btnWrite.Background = new SolidColorBrush(Colors.Red);
-                                    var res = MessageBox.Show("Ошибки при сверке с Out. \nПродолжить?", "Внимание!", MessageBoxButton.YesNo, MessageBoxImage.Error);
-                                    //
-                                    notErr = (res.ToString() == "Yes");
+                                    if (showMessageFlag)
+                                    {
+                                        Model.pWrBG = "Red";// View.btnWrite.Background = new SolidColorBrush(Colors.Red);
+                                        var res = MessageBox.Show("Ошибки при сверке с Out. \nПродолжить?", "Внимание!", MessageBoxButton.YesNo, MessageBoxImage.Error);
+                                        //
+                                        notErr = (res.ToString() == "Yes");
+                                        if (!notErr)
+                                        {
+                                            status = CommandStatus.FAILED;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        notErr = false;
+                                        status = CommandStatus.FAILED;
+                                    }
                                 }
+                                
                                 //
                                 if (notErr)
-                                {
+                                 {
                                     // если продолжаем...
                                     GetComplList(kudaList, compList);// записываем в comList все узлы из COMPLECT, которые затрагивает приложение, с учетом групповых признаков
 
                                     AddTextToRtbInfo(DateTime.Now + " CompList до модификации: " + compList.Count, false);
                                     //
                                     ModifyComplect(prilzList.OrderByDescending(z => z.ko).ToList(), compList, draft.ToString()); //вносим изменения по приложению в CompList с учетом группового признака
-
                                 }
                             }
                             //
@@ -693,10 +766,16 @@ namespace FormationZakaz.ViewModels
                                 CreateAndWritePrilzTmpTable("#prilz", prilzList);// формируем временный частичный комплект #prilz на основе prilzlist
                                 //
 
-                                FormOutPro(draft, 0, prilzList.Where(z => z.ko == 1 || z.ko == 3).ToList());//формируем Listoutpro - для записи в outpro или out_bnsi
+                                subStatus = FormOutPro(draft, 0, prilzList.Where(z => z.ko == 1 || z.ko == 3).ToList(), showMessageFlag);
+                                //формируем Listoutpro - для записи в outpro или out_bnsi
+                                if (subStatus == CommandStatus.FAILED)
+                                    status = CommandStatus.FAILED;
+
+                                //status = subStatus == CommandStatus.EXECUTED ? status = CommandStatus.EXECUTED : status = CommandStatus.FAILED;
                             }
                         }
                         else
+
                             if (tip == 4)
                             {
                                 AddTextToRtbInfo("Запчасти.", false);
@@ -705,48 +784,73 @@ namespace FormationZakaz.ViewModels
                                 {
                                     draft = Convert.ToDecimal(Model.pTbOrder.ToString() + Model.pTbNumber.ToString() + ",00");
                                     //
-                                    GetPartsComplList(compList, draft);
+                                    GetPartsComplList(compList, draft, showMessageFlag);
                                     //
                                     CreateAndWriteComplTable(compList);
                                     //
-                                    FormOutPro(draft, 0, null);//формируем Listoutpro - для записи в outpro 
+                                    subStatus = FormOutPro(draft, 0, null, showMessageFlag);//формируем Listoutpro - для записи в outpro 
+                                    if (subStatus == CommandStatus.FAILED)
+                                        status = CommandStatus.FAILED;
                                 }
-                                else AddTextToRtbInfo("Ошибка: номер заказа меньше 900.", true);
+                                else
+                                {
+                                AddTextToRtbInfo("Ошибка: номер заказа меньше 900.", true);
+                                    status = CommandStatus.FAILED;
+                                }
                             }
                             else
+                            {
                                 if (tip == 6)
                                 {
                                     AddTextToRtbInfo("Оснастка.", false);
                                     //
                                     var dr = GetProdList();
                                     AddTextToRtbInfo("Чертёж: " + draft.ToString().Replace(',', '.'), false);//dr
-                                    //
+                                                                                                             //
                                     if (draft == dr)
                                     {
 
-                                        FormOutPro(draft, 1, null);//формируем Listoutpro - для записи в outpro 
-                                        //
-                                        Model.pWrBG = "RoyalBlue";// View.btnWrite.Background = new SolidColorBrush(Colors.RoyalBlue);
+                                        subStatus = FormOutPro(draft, 1, null, showMessageFlag);//формируем Listoutpro - для записи в outpro 
+                                        if (subStatus == CommandStatus.FAILED)
+                                            status = CommandStatus.FAILED;
+                                    //
+                                    Model.pWrBG = "RoyalBlue";// View.btnWrite.Background = new SolidColorBrush(Colors.RoyalBlue);
+                                        
                                     }
                                     else
+                                    {
                                         AddTextToRtbInfo("Ошибка: Чертеж  в  PL_GOD =" + draft.ToString().Replace(',', '.') + " не совпадает с\n              чертежом из PROD =" + dr.ToString().Replace(',', '.') + " \n              Заказ не сформирован. ", true);
+                                        status = CommandStatus.FAILED;
+                                    }
                                 }
-                                else AddTextToRtbInfo("Ошибка tip в pl_god .", true);
-                    }
+                                else
+                                {
+                                    AddTextToRtbInfo("Ошибка tip в pl_god .", true);
+                                    status = CommandStatus.FAILED;
+                                }
+                            }
+                     }
                     else
                     {
-                        AddTextToRtbInfo("Заказ в товаре", true);
-                        Model.pEnWrite = false;
+                                AddTextToRtbInfo("Заказ в товаре", true);
+                                Model.pEnWrite = false;
+                                status = CommandStatus.FAILED;
                     }
                 }
                 else
                 {
                     AddTextToRtbInfo("Заказа нет в pl_god.", true);
                     Model.pEnWrite = false;
+                    status = CommandStatus.FAILED;
                 }
             }
-        
+            else
+            {
+                status = CommandStatus.FAILED;
+            }
+            return status;
         }
+
         //+
         /// <summary>
         /// Добавить текст в окно ИНФО
@@ -1003,10 +1107,10 @@ namespace FormationZakaz.ViewModels
                 {
                     //если не удаляемая запись...
                     if (_cmp==null)
-                    {
+                    { 
                         // если узла не было в комплекте вставляем фиктивную запись в узел 9999(хотя надо бы в 99999)- еще не разу не вставили
                         query = "INSERT INTO complect values ('',{0},{1},9999,{2},0,0,{3},{4},{5},{6},{7},''";
-                       Model.db.ExecuteStoreCommand(query, pl.poz, pl.what, pl.kol, pl.spec, pl.ksi, pl.path, "ДД" + pl.zak.ToString(), "/" + pl.nom.ToString());
+                        Model.db.ExecuteStoreCommand(query, pl.poz, pl.what, pl.kol, pl.spec, pl.ksi, pl.path, "ДД" + pl.zak.ToString(), "/" + pl.nom.ToString());
                         AddTextToRtbInfo("Вставлена в complect запись: what = " + (decimal)pl.what + " kuda = " + (decimal)pl.kuda, false);
                         if (pl.spec == 2)
                         {
@@ -1121,7 +1225,7 @@ namespace FormationZakaz.ViewModels
         /// </summary>
         // +
   
-        void CreateAndWritePrilzTmpTable(string tNameP, List<pril_zM> prilzList)//#prilz
+        public void CreateAndWritePrilzTmpTable(string tNameP, List<pril_zM> prilzList)//#prilz
         {
             Model.db.ExecuteStoreCommand("IF OBJECT_ID(N'TempDB..#prilz', N'U') IS NOT NULL   DROP TABLE  #prilz");
             DataClasses.globaltmptabl = false;
@@ -1142,8 +1246,9 @@ namespace FormationZakaz.ViewModels
         /// </summary>
         /// <param name="draft"></param>
         // +
-        void FormOutPro(decimal draft, int osn, List<pril_zM> prilzList)
+        CommandStatus FormOutPro(decimal draft, int osn, List<pril_zM> prilzList, bool showMessageFlag)
         {
+            CommandStatus status = CommandStatus.EXECUTED;
             var normErr = 0;
             var tName = "#outpro";
             var query = "";
@@ -1156,8 +1261,8 @@ namespace FormationZakaz.ViewModels
            
             if (Model.tip == "4") ModifyPartsCompl();
             //
-   query = "SELECT * FROM #outpro";
-   var resm=Model.db.ExecuteStoreQuery<outproM>(query).ToList();
+           query = "SELECT * FROM #outpro";
+           var resm=Model.db.ExecuteStoreQuery<outproM>(query).ToList();
           //  query = "SELECT * FROM " + tName;
             //var sqlData = SQLHandler.GetSQL(query);
             Model.listOutPro = new List<outpro>();
@@ -1231,8 +1336,12 @@ namespace FormationZakaz.ViewModels
             Model.ppmt = Model.mt; Model.ppnv = Model.nv; Model.ppzp = Model.zp;
             if (Model.ppnv == 0)
             {
-                MessageBox.Show("В заказе трудоемкость = 0! - Ошибка!!!", "Внимание!", MessageBoxButton.OK, MessageBoxImage.Error);
+                status = CommandStatus.FAILED;
                 AddTextToRtbInfo("\n В заказе трудоемкость = 0! - Ошибка!!!", true);
+                if (showMessageFlag)
+                {
+                    MessageBox.Show("В заказе трудоемкость = 0! - Ошибка!!!", "Внимание!", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
             }
             //
            // sqlData.Close();
@@ -1259,6 +1368,7 @@ namespace FormationZakaz.ViewModels
                     //
                     if (prilzErrList.Count > 0)
                     {
+                        status = CommandStatus.FAILED;
                         AddTextToRtbInfo("__________________________________________________________________________________________________", true);
                         AddTextToRtbInfo("Ошибки в ДД: ", true);
                         //
@@ -1279,7 +1389,13 @@ namespace FormationZakaz.ViewModels
             //
             if (normErr > 0)
             {
-                MessageBox.Show("В заказе есть чертежи с нулевым кодом материала/нормой!", "Внимание!", MessageBoxButton.OK, MessageBoxImage.Error);
+                status = CommandStatus.FAILED;
+                AddTextToRtbInfo("В заказе есть чертежи с нулевым кодом материала/нормой!", true);
+                if (showMessageFlag)
+                {
+                    MessageBox.Show("В заказе есть чертежи с нулевым кодом материала/нормой!", "Внимание!", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                
                 //
                 View.Hide();
                 View.Show();
@@ -1294,12 +1410,13 @@ namespace FormationZakaz.ViewModels
                    var cn= Model.pListOutPro.Count(p=>p.across==w.draft);
                     if(cn==0)
                     {
-                        
+                        status = CommandStatus.FAILED;
                               AddTextToRtbInfo("В Н И М А Н И Е ! Проверьте состав  узла : "+(decimal) w.draft+ " в нем нет входящих позиций!", true);
                     }
                 }
             //View.dgResult.ItemsSource = Model.listOutPro.OrderBy(z => z.pid).ThenBy(x => x.cid).ToList();
             Model.pgbResult = Model.pgbResult + "(" + Model.listOutPro.Count + ")";// View.gbResult.Header = Model.pgbResult + "(" + Model.listOutPro.Count + ")";
+            return status;
         }
         /// <summary>
         /// Создать таблицу #outpro
@@ -2132,8 +2249,13 @@ namespace FormationZakaz.ViewModels
                foreach (var pz in prilzList)
                {
                    var opFind = Model.listOutPro.Find(op => pz.what == op.draft && pz.kuda == op.across &&
-                                              pz.spec == op.spec && pz.ksi == op.ksi && pz.poz == op.posit);
-                   if (opFind == null) prilzErrList.Add(pz);
+                   pz.spec == op.spec && pz.ksi == op.ksi && pz.poz == op.posit);
+
+                   if (opFind == null)
+                    {
+                        prilzErrList.Add(pz);
+                    }
+                    
                }
            }
            /// <summary>
@@ -2142,7 +2264,7 @@ namespace FormationZakaz.ViewModels
            /// <param name="complList"></param>
            /// <param name="draft"></param>
            // +
-           void GetPartsComplList(List<complect> complList, decimal draft)
+           void GetPartsComplList(List<complect> complList, decimal draft, bool showMessageFlag)
            {
                var _mg4 = (from p in Model.db.mg405 where p.kzt == Model.pTbOrder && p.kzz == Model.pTbNumber select new {ocv=p.ocv,@is=p.@is,kv=p.kv,ki=p.ki }).ToList();
                //var query = "SELECT ocv, [is], kv, ki FROM FOX.dbo.mg405 WHERE kzt = " + Model.order + " AND kzz = " + Model.number;
@@ -2174,7 +2296,11 @@ namespace FormationZakaz.ViewModels
                //
                if (mgErr > 0)
                {
-                   MessageBox.Show("Предупреждение! \n В mg405 количество на складе и в заказе совпадают! \n В заказ для изготовления ДСЕ не включается", "Внимание!", MessageBoxButton.OK, MessageBoxImage.Error);
+                    if (showMessageFlag)
+                    {
+                    MessageBox.Show("Предупреждение! \n В mg405 количество на складе и в заказе совпадают! \n В заказ для изготовления ДСЕ не включается", "Внимание!", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                
                    //
                    Model.pWrBG = "Red";// View.btnWrite.Background = new SolidColorBrush(Colors.Red);
                }
@@ -2250,8 +2376,8 @@ namespace FormationZakaz.ViewModels
                }
                //
                complList = complList.OrderBy(z => z.spec).ThenBy(x => x.what).ToList();
-               Model.listParts = complList.Where(z => z.spec == 6 && z.ksi == 0).ToList();
-           }
+               Model.listParts = complList.Where(z => z.spec == 6 && z.ksi == 0).ToList();  // GetPartsComplList
+        }
            /// <summary>
            /// Склеивает маршрут из 9-ти частей
            /// </summary>
@@ -2432,7 +2558,632 @@ namespace FormationZakaz.ViewModels
 
                return tfio;
            }
+
+        private void _mLoadOrders()
+        {
+            if (Model.pIsAllSelected)
+            {
+                Model.pIsAllSelected = false;
+            }
+            //DateTime firstDate = DateTime.Now.Date;
+            //DateTime secondDate = DateTime.Now.Date;
+            DateTime firstDate = new DateTime(2024, 12, 1); 
+            DateTime secondDate = new DateTime(2024, 12, 14); 
+
+            List<Order> orders = Model.mGetOrders(firstDate, secondDate);
+            Model.mUpdateOrders(orders);
+        }
+
+        // Метод для старта вычислений
+        private void _mStartCalculation()
+        {
+            _mChangeProgressBarVisibility();
+            _mChangeAccessCommandElementsEnabled();
+
+            if (!_worker.IsBusy)
+            {
+                _worker.RunWorkerAsync();
+            }
+        }
+
+        // Метод для выполнения работы в фоновом потоке
+        private void _mWorker_DoWork(object sender, DoWorkEventArgs e)
+        {
+            CommandStatus status;
+            bool showMessageFlag = false;
+            var selectedOrders = Model.mGetSelectedOrders();
+            int totalOrders = selectedOrders.Count;
+            double completedOrders = 0;
+
+            foreach (var order in selectedOrders)
+            {  
+                // Рассчитываем прогресс
+                int progressPercentage = (int)((completedOrders / totalOrders) * 100);
+
+                // Обновляем прогресс в UI потоке
+                _worker.ReportProgress(progressPercentage);
+
+                Model.pSelectedOrder = order;
+                Model.pTbOrder = order.OrderID;
+                Model.pTbNumber = order.Number;
+
+                // Долгая операция
+                status = mBtnCalc(showMessageFlag);
+
+                order.Log = Model.pTextBlock;
+                order.Result = Model.pListOutPro;
+                order.CountResult = order.Result.Count;
+
+                if (status == CommandStatus.EXECUTED)
+                {
+                    order.pStatus = OrderStatus.COMPLECTED;
+                }
+                else
+                {
+                    order.pStatus = OrderStatus.NOT_COMPLECTED;
+                }
+                completedOrders++;
+            }
+        }
+
+        // Обработчик для обновления прогресс-бара
+        private void _mWorker_ProgressChanged(object sender, ProgressChangedEventArgs e)
+        {
+            Model.pProgress = e.ProgressPercentage;
+        }
+
+
+        // Код, выполняемый после завершения задачи
+        private void _mWorker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
+        {
+            _mChangeProgressBarVisibility();
+            _mChangeAccessCommandElementsEnabled();
+        }
+
+        private void _mChangeProgressBarVisibility()
+        {
+            Model.pIsProgressVisible = !Model.pIsProgressVisible;
+        }
+
+        private void _mChangeAccessCommandElementsEnabled()
+        {
+            Model.pAccessCommandElementsForOneOrder = !Model.pAccessCommandElementsForOneOrder;
+            Model.pAccessCommandElementsForOrders = !Model.pAccessCommandElementsForOrders;
+        }
+
+        private void _mSetAllOrdersSelection(bool isSelected)
+        {
+            foreach (var order in Model.pOrders)
+            {
+                order.IsSelected = isSelected;
+            }
+        }
+
+        private void _mBtnCalcWithFlag()
+        {
+            mBtnCalc(true);
+        }
+
         #endregion
+
+        #region new methods for CalcOutPro
+
+        private void _mFindOrderInOutpro()
+        {
+            
+        }
+
+        private bool _mCheckOrderInOutpro()
+        {
+            return false;
+        }
+
+
+        private void _mShowMsgBox()
+        {
+
+        }
+
+        private void _mFindOrderInPl_god()
+        {
+
+        }
+
+        private void _mCheckOrderInPl_god()
+        {
+
+        }
+
+        private void _mCheckOrderInProduct()
+        {
+
+        }
+
+        private void _mIsMainProduct()
+        {
+
+        }
+
+        private void _mHasApplication()
+        {
+
+        }
+
+        #region new methods for replace GetPrilzAndKudaList
+
+        private List<izvv> _mGetApplicationData(string applicationNumber)
+        {
+            return (from p in Model.db.izvv where p.nom == applicationNumber select p).ToList();
+        }
+
+        private List<pril_zM> _mGenerateApplicationData(izvv record, List<decimal> nodesList)
+        {
+            List<pril_zM> applicationData = new List<pril_zM>();
+
+            string nodeStr = LetterToDigit(record.kuda.ToString().Trim());
+            string nodeIsStr = record.isk_ot.ToString().Trim().PadLeft(2, '0');
+            decimal node = Convert.ToDecimal(nodeStr + "," + nodeIsStr);
+            _mAddToNodesList(node, nodesList);
+
+            var targetStr = LetterToDigit(record.what.ToString().Trim());
+            var targetIsStr = record.is_ot.ToString().Trim().PadLeft(2, '0');
+            var target = Convert.ToDecimal(targetStr + "," + targetIsStr);
+
+            applicationData.Add(new pril_zM
+            {
+                zak = (decimal)Model.pTbOrder,
+                nom = (decimal)Model.pTbNumber,
+                ko = (decimal)record.k_ob,
+                poz = (decimal)record.posit,
+                what = target,
+                kol = (decimal)record.quant,
+                kuda = node,
+                spec = (decimal)record.spec,
+                path = record.path,
+                km = (decimal)record.km,
+                norm = (decimal)record.norm,
+                dd = 0,
+                ksi = (decimal)record.ksi,
+                dat = Convert.ToDateTime(record.data),
+                norm_p = record.nom,
+                r_zag = record.r_zag,
+                k_det = (decimal)record.k_det
+            });
+
+            return applicationData;
+        }
+
+        private void _mProcessApplication(string applicationNumber)
+        {
+            var nodesList = new List<decimal>();
+            var applicationsList = new List<pril_zM>();
+
+            var applicationData = _mGetApplicationData(applicationNumber);
+
+            foreach (var record in applicationData)
+            {
+                // Формируем значение узла и добавляем его в nodesList
+                var nodeStr = LetterToDigit(record.kuda.ToString().Trim());
+                var nodeIsStr = record.isk_ot.ToString().Trim().PadLeft(2, '0');
+                var node = Convert.ToDecimal(nodeStr + "," + nodeIsStr);
+                
+                // Генерируем данные приложения и добавляем их в общий список
+                var generatedData = _mGenerateApplicationData(record, nodesList);
+                applicationsList.AddRange(generatedData);
+            }
+
+            var errors = _mValidateApplicationData(applicationsList, nodesList);
+
+            if (errors.Any())
+            {
+                _mLogApplicationErrors(errors);
+            }
+        }
+
+        private void _mAddToNodesList(decimal node, List<decimal> nodesList)
+        {
+            if (!nodesList.Contains(node))
+            {
+                nodesList.Add(node);
+            }    
+        }
+
+        private List<pril_zM> _mValidateApplicationData(List<pril_zM> applicationsList, List<decimal> nodesList)
+        {
+            return (from p in applicationsList
+                    join o in nodesList on p.what equals o
+                    where p.ko == 2
+                    select p).ToList();
+        }
+
+        private void _mLogApplicationErrors(List<pril_zM> errorsList)
+        {
+            foreach (var error in errorsList)
+            {
+                AddTextToRtbInfo($"\nОшибка в ДД - есть изменения в удаляемом узле  :" +
+                    $"\nПозиция: {error.poz}" +
+                    $"\tЧертёж: {error.what}" +
+                    $"\tУзел: {error.kuda}" +
+                    "\nПроверьте в ДД записи, входящие в вышеуказанный узел \n", true);
+            }
+        }
+
+        #endregion new methods for replace GetPrilzAndKudaList
+
+        #region new methods for replace CheckOut
+
+        /// <summary>
+        /// Генерирует заголовок для сверки позиций приложения с OUT.
+        /// </summary>
+        /// <returns>Строка, содержащая заголовок для сверки.</returns>
+        private string _mGenerateComparisonHeader()
+        {
+            var header = DateTime.Now + "\n ";
+            header += $"\n{'*' * 100}";
+            header += "\n* Сверка позиций приложения с OUT, если найдены позиции которых нет в общем виде                  *";
+            header += "\n* - проверьте не касаются ли позиции приложения с КО=2 или КО=3 ДСЕ вводимых в данном приложении  *";
+            header += "\n*  -  если это так, то можно формировать заказ далее                                                                                               *";
+            header += $"\n{'*' * 100}";
+            header += "   ";
+            return header;
+        }
+
+        /// <summary>
+        /// Получает список позиций, которые не найдены в общем виде (OUT), для сверки.
+        /// </summary>
+        /// <param name="list">Список позиций приложения для проверки.</param>
+        /// <param name="draft">Чертёж для сверки.</param>
+        /// <returns>Строка с описанием позиций, которых нет в общем виде.</returns>
+        private string _mGetPositionsNotInOut(List<pril_zM> applicationsList, decimal draft)
+        {
+            var result = "";
+
+            // Проверка каждой позиции, не относящейся к КО=1
+            foreach (var l in applicationsList.Where(z => z.ko != 1))
+            {
+                // Проверка наличия позиции в общем виде по чертежу и узлу
+                var _out = (from p in Model.db.@out where p.to == draft && p.across == l.kuda select p).ToList();
+                if (_out.Count == 0)
+                {
+                    result += "\nПозиция: " + l.poz + "\tЧертёж: " + (decimal)l.what + "\t Узел: " + (decimal)l.kuda + " - нет в общем виде.";
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Логирует результаты сверки позиций в информационное окно.
+        /// </summary>
+        /// <param name="str">Строка с результатами сверки позиций.</param>
+        /// <param name="draft">Чертёж для логирования.</param>
+        private void _mLogComparisonResult(string str, decimal draft)
+        {
+            if (!string.IsNullOrEmpty(str))
+            {
+                // Логирование информации о сверке
+                AddTextToRtbInfo($"{'-' * 100}", false);
+                AddTextToRtbInfo(DateTime.Now + "\t Заказ/Номер: " + Model.pTbOrder.ToString() + "/" + Model.pTbNumber.ToString() + "\t Чертёж: " + (decimal)draft, false);
+                AddTextToRtbInfo(str, false);
+                AddTextToRtbInfo($"{'-' * 100}", false);
+            }
+            else
+            {
+                // Логирование сообщения об отсутствии ошибок
+                AddTextToRtbInfo(DateTime.Now + " Сверка прошла - О Ш И Б О К   Н Е Т!", false);
+                AddTextToRtbInfo("*****", false);
+            }
+        }
+
+        /// <summary>
+        /// Выполняет полную сверку позиций приложения с OUT, включая генерацию заголовка, проверку позиций и логирование результата.
+        /// </summary>
+        /// <param name="list">Список позиций приложения для сверки.</param>
+        /// <param name="draft">Чертёж для сверки.</param>
+        /// <returns>Результат сверки в виде строки.</returns>
+        public string _mPerformComparisonCheck(List<pril_zM> list, decimal draft)
+        {
+            var str = _mGenerateComparisonHeader();
+            AddTextToRtbInfo(str, false); // Логируем заголовок 
+
+            // Проверка позиций
+            str = _mGetPositionsNotInOut(list, draft);
+
+            // Логирование результатов
+            _mLogComparisonResult(str, draft);
+
+            return str;
+        }
+
+        #endregion new methods for replace CheckOut
+
+        #region new methods for replace GetComplList
+
+        /// <summary>
+        /// Метод для получения списка переменных частей (группа == 2).
+        /// </summary>
+        /// <param name="kitsList">Список комплектующих.</param>
+        /// <returns>Список уникальных значений kuda (node/узел) для переменных частей.</returns>
+        private List<decimal>_mGetVariableParts(List<complect> kitsList)
+        {
+            return (from p in kitsList where p.@group == 2 select p.kuda).Distinct().ToList();
+        }
+
+        /// <summary>
+        /// Метод для получения постоянных частей для заданного узла.
+        /// </summary>
+        /// <param name="intNode">Узел, для которого ищем постоянные части.</param>
+        /// <returns>Список постоянных частей для указанного узла.</returns>
+        private List<complect> _mGetConstantParts(decimal intNode)
+        {
+            return (from p in Model.db.complect where p.kuda == intNode && p.@group == 1 select p).ToList();
+        }
+
+        /// <summary>
+        /// Метод для добавления постоянной части в список, если такая еще не существует.
+        /// </summary>
+        /// <param name="kitsList">Список комплектующих, в который будет добавлена постоянная часть.</param>
+        /// <param name="item">Постоянная часть, которая может быть добавлена в список.</param>
+        private void _mAddConstantPartIfNotExist(List<complect> kitsList, complect item)
+        {
+            var existing = kitsList.Count(p =>
+                p.format == item.format && p.posit == item.posit && p.what == item.what &&
+                p.kuda == item.kuda && p.quant == item.quant && p.ed == item.ed &&
+                p.group == item.group && p.spec == item.spec && p.ksi == item.ksi &&
+                p.path == item.path && p.izv == item.izv && p.dti == item.dti && p.tfl == item.tfl);
+
+            if (existing == 0)
+            {
+                kitsList.Add(new complect
+                {
+                    format = item.format,
+                    posit = item.posit,
+                    what = item.what,
+                    kuda = item.kuda,
+                    quant = item.quant,
+                    ed = item.ed,
+                    group = item.group,
+                    spec = item.spec,
+                    ksi = item.ksi,
+                    path = item.path,
+                    izv = item.izv,
+                    dti = item.dti,
+                    tfl = item.tfl
+                });
+            }
+        }
+
+        /// <summary>
+        /// Метод для добавления постоянных частей, если они соответствуют переменным частям в списке комплектующих.
+        /// </summary>
+        /// <param name="kitsList">Список комплектующих, в который могут быть добавлены постоянные части.</param>
+        /// <returns>Обновленный список комплектующих с добавленными постоянными частями.</returns>
+        private List<complect> _mAddConstantPartIfNeeded(List<complect> kitsList)
+        {
+            var updatedKitsList = new List<complect>(kitsList);
+
+            // 1. Поиск переменных частей
+            var variableParts = _mGetVariableParts(updatedKitsList);
+
+            // 2. Для каждой переменной части, проверяем и добавляем постоянную часть
+            foreach (var node in variableParts)
+            {
+                var intNode = decimal.Truncate(node);
+                if (intNode != node)
+                {
+                    var constantParts = _mGetConstantParts(intNode);
+                    foreach (var item in constantParts)
+                    {
+                        // 3. Проверяем, не существует ли такая постоянная часть в списке, если нет, добавляем
+                        _mAddConstantPartIfNotExist(updatedKitsList, item);
+                    }
+                }
+            }
+
+            return updatedKitsList;
+        }
+
+        #endregion new methods for replace GetComplList
+
+        #region new methods for replace ModifyComplect
+
+        void ModifyComplectNew(List<pril_zM> applicationsList, List<complect> kitsList, string draft)
+        {
+            int delCount = 0;
+            int addCount = 0;
+            int changeCount = 0;
+            List<string> queryQueue = new List<string>();
+
+            _mLogHeader(draft);
+
+            foreach (var application in applicationsList)
+            {
+                ProcessApplicationRecord(application, kitsList, ref delCount, ref addCount, ref changeCount, queryQueue);
+            }
+
+            _mExecuteQueriesToInsertKits(queryQueue);
+            LogFooter(kitsList.Count, delCount, addCount, changeCount);
+        }
+
+        void _mLogHeader(string draft)
+        {
+            AddTextToRtbInfo("________________", false);
+            AddTextToRtbInfo($"{DateTime.Now}\t Заказ/Номер: {Model.pTbOrder}/{Model.pTbNumber}\t Чертёж: {draft.Replace(',', '.')}", false);
+        }
+
+        void LogFooter(int kitsListCount, int delCount, int addCount, int changeCount)
+        {
+            AddTextToRtbInfo("________________", false);
+            AddTextToRtbInfo($"ko = 3 изменено: {changeCount}\tko = 2 удалено: {delCount}\tko = 1 добавлено: {addCount}", false);
+            AddTextToRtbInfo($"{DateTime.Now} CompList после модификации: {kitsListCount}", false);
+        }
+
+        void ProcessApplicationRecord(pril_zM application, List<complect> kitsList, ref int delCount, ref int addCount, ref int changeCount, List<string> queryQueue)
+        {
+            _mValidateApplicationRecord(application, kitsList);
+            _mCheckAndQueueInsertQueries(application, queryQueue);
+
+            var existingKit = kitsList
+                .OrderBy(kit => kit.spec)
+                .SingleOrDefault(
+                    kit =>
+                    kit.what == application.what &&
+                    kit.posit == application.poz &&
+                    kit.kuda == application.kuda &&
+                    kit.spec == application.spec &&
+                    kit.ksi == application.ksi
+                );
+
+            if (existingKit != null)
+            {
+                _mHandleExistingkit(application, kitsList, existingKit, ref delCount, ref changeCount);
+            }
+            else
+            {
+                ProcessNewOrGroupedEntry(application, kitsList, ref addCount, ref delCount, ref changeCount);
+            }
+        }
+
+        void _mValidateApplicationRecord(pril_zM pl, List<complect> compList)
+        {
+            var compl = compList.Find(z => z.kuda == pl.kuda);
+            if (compl != null)
+                pl.dd = compl.group > 0 ? 2 : 0;
+            else
+                AddTextToRtbInfo($"Узла: {pl.kuda} нет в compl.", true);
+        }
+
+        void _mCheckAndQueueInsertQueries(pril_zM pl, List<string> placeholderQueries)
+        {
+            var existingInDb = Model.db.complect.FirstOrDefault(p => p.what == pl.what);
+            if (pl.ko != 2 && existingInDb == null)
+            {
+                _mAddInsertKitQueryToQueue(pl, placeholderQueries);
+            }
+        }
+
+        void _mAddInsertKitQueryToQueue(pril_zM pl, List<string> placeholderQueries)
+        {
+            var query = "INSERT INTO complect values ('',{0},{1},9999,{2},0,0,{3},{4},{5},{6},{7},'')";
+            placeholderQueries.Add(string.Format(query, pl.poz, pl.what, pl.kol, pl.spec, pl.ksi, pl.path, "ДД" + pl.zak, "/" + pl.nom));
+
+            if (pl.spec == 2)
+            {
+                query = "INSERT INTO complect values ('',{0},{1},{1},1,0,0,1,{2},{3},{4},{5},'')";
+                placeholderQueries.Add(string.Format(query, pl.poz, pl.what, pl.what, pl.ksi, pl.path, "ДД" + pl.zak, "/" + pl.nom));
+            }
+        }
+
+        void _mExecuteQueriesToInsertKits(List<string> placeholderQueries)
+        {
+            foreach (var query in placeholderQueries)
+            {
+                Model.db.ExecuteStoreCommand(query);
+            }
+        }
+
+        void _mHandleExistingkit(pril_zM pl, List<complect> compList, complect res, ref int del, ref int change)
+        {
+            if (pl.ko == 2)
+            {
+                compList.Remove(res);
+                del++;
+            }
+            else if (pl.ko == 3)
+            {
+                res.quant = pl.kol;
+                res.spec = pl.spec;
+                res.path = pl.path;
+                change++;
+            }
+            else
+            {
+                AddTextToRtbInfo($"ДД\tПозиция:{pl.poz}\tЧертёж:{pl.what}\tУзел: {pl.kuda}\tРСП: {pl.spec}\tКСИ: {pl.ksi}\t ko = 1 уже есть в сomplect", true);
+            }
+        }
+
+        void ProcessNewOrGroupedEntry(pril_zM pl, List<complect> compList, ref int add, ref int del, ref int change)
+        {
+            if (pl.ko == 1)
+            {
+                _mAddNewKit(pl, compList, ref add);
+            }
+            else
+            {
+                _mProcessKitRecordBySpecifications(pl, compList, ref del, ref change);
+            }
+        }
+
+        void _mAddNewKit(pril_zM pl, List<complect> compList, ref int add)
+        {
+            var kudaStr = pl.kuda.ToString();
+            var ind = kudaStr.IndexOf(",");
+            var kudaEnd = ind >= 0 ? Convert.ToDecimal(kudaStr.Substring(ind + 1)) : 0;
+
+            compList.Add(new complect
+            {
+                posit = pl.poz,
+                kuda = pl.kuda,
+                what = pl.what,
+                quant = pl.kol,
+                spec = pl.spec,
+                path = pl.path,
+                ksi = pl.ksi,
+                group = pl.dd == 0 ? 0 : (kudaEnd > 0 ? 2 : 1)
+            });
+            add++;
+        }
+
+        void _mProcessKitRecordBySpecifications(pril_zM pl, List<complect> compList, ref int del, ref int change)
+        {
+            var intkuda = decimal.Truncate(pl.kuda);
+            var groupedEntries = compList.Where(p => p.kuda == pl.kuda && p.group == 2).ToList();
+
+            if (groupedEntries.Any())
+            {
+                _mHandleKitRecord(pl, compList, intkuda, ref del, ref change);
+            }
+            else
+            {
+                LogMissingEntry(pl);
+            }
+        }
+
+        void _mHandleKitRecord(pril_zM pl, List<complect> compList, decimal intkuda, ref int del, ref int change)
+        {
+            var fixedEntry = compList.OrderBy(z => z.spec)
+                                     .SingleOrDefault(z => z.what == pl.what && z.posit == pl.poz && z.kuda == intkuda && z.spec == pl.spec && z.ksi == pl.ksi && z.group == 1);
+
+            if (fixedEntry != null)
+            {
+                if (pl.ko == 2)
+                {
+                    compList.Remove(fixedEntry);
+                    del++;
+                }
+                else
+                {
+                    fixedEntry.quant = pl.kol;
+                    fixedEntry.spec = pl.spec;
+                    fixedEntry.path = pl.path;
+                    change++;
+                }
+            }
+            else
+            {
+                LogMissingEntry(pl);
+            }
+        }
+
+        void LogMissingEntry(pril_zM pl)
+        {
+            AddTextToRtbInfo($"ДД\tПозиция:{pl.poz}\tЧертёж: {pl.what}\tУзел: {pl.kuda}\tРСП: {pl.spec}\tКСИ: {pl.ksi}\t ko = {pl.ko} нет в сomplect", true);
+        }
+
+        #endregion new methods for replace ModifyComplect
+
+        #endregion new methods for CalcOutPro
+
     }
- 
+
 }
