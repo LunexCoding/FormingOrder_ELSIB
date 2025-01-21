@@ -1,6 +1,6 @@
 ﻿<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-         xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
+         xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolcomplect"
         xmlns:beh="clr-namespace:Fox;assembly=Fox"
         xmlns:local="clr-namespace:FormationZakaz.Data"
         xmlns:tools="clr-namespace:FormationZakaz.Tools.Converters"

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Windows.Shell;
 
 namespace FormationZakaz.Data
 {
@@ -13,23 +14,23 @@ namespace FormationZakaz.Data
     }
 
 
-    public class KitHandler
+    public class ComplectHandler
     {
 
         private int delCount;
         private int addCount;
         private int changeCount;
-        private List<complect> kitsList;
+        private List<complect> complectsList;
         private List<pril_zM> applicationsList;
         private Action<string, bool> logAction;
         private readonly IModel db; // Используем интерфейс для доступа к базе данных
 
-        KitHandler(List<complect> kitsList, List<pril_zM> applicationsList, Action<string, bool> logAction)
+        ComplectHandler(List<complect> complectsList, List<pril_zM> applicationsList, Action<string, bool> logAction)
         {
             delCount = 0;
             addCount = 0;
             changeCount = 0;
-            this.kitsList = new List<complect>(kitsList);
+            this.complectsList = new List<complect>(complectsList);
             this.applicationsList = applicationsList;
             this.logAction = logAction;
         }
@@ -39,7 +40,7 @@ namespace FormationZakaz.Data
             delCount = 0;
             addCount = 0;
             changeCount = 0;
-            kitsList.Clear();
+            complectsList.Clear();
             applicationsList.Clear();
         }
 
@@ -50,8 +51,32 @@ namespace FormationZakaz.Data
 
             foreach (var application in applicationsList)
             {
-                var kit = kitsList.Find(z => z.kuda == application.kuda);
-                _mHandleKitByOperationCode(kit, application);
+                complect complectByNode = complectsList.Find(z => z.kuda == application.kuda);
+                _mValidateApplicationRecord(complectByNode, application);
+
+                _mFindAndInsertComplectToDB(application);
+
+                complect requiredComplect = complectsList
+                    .OrderBy(complect => complect.spec)
+                    .SingleOrDefault(
+                        complect =>
+                        complect.what == application.what &&
+                        complect.posit == application.poz &&
+                        complect.kuda == application.kuda &&
+                        complect.spec == application.spec &&
+                        complect.ksi == application.ksi
+                    );
+                //var nodeStr = application.kuda.ToString();
+                //int commaIndex = nodeStr.IndexOf(",");
+                //var nodeEnd = Convert.ToDecimal(nodeStr.Substring(commaIndex + 1));
+                //var what = (decimal)application.what;
+                //var node = (decimal)application.kuda;
+
+
+                _mHandleComplectByOperationCode(requiredComplect, application);
+
+
+                
             }
 
             _mLogFooter();
@@ -67,15 +92,14 @@ namespace FormationZakaz.Data
         {
             logAction("____", false);
             logAction($"ko = 3 изменено: {changeCount}\tko = 2 удалено: {delCount}\tko = 1 добавлено: {addCount}", false);
-            logAction($"{DateTime.Now} CompList после модификации: {kitsList.Count}", false);
+            logAction($"{DateTime.Now} CompList после модификации: {complectsList.Count}", false);
         }
 
-        private void _mValidateApplicationRecord(pril_zM application)
+        private void _mValidateApplicationRecord(complect complect, pril_zM application)
         {
-            var requiredKit = kitsList.Find(kit => kit.kuda == application.kuda);
-            if (requiredKit != null)
+            if (complect != null)
             {
-                application.dd = requiredKit.group > 0 ? 2 : 0;
+                application.dd = complect.group > 0 ? 2 : 0;
             }
             else
             {
@@ -83,37 +107,37 @@ namespace FormationZakaz.Data
             }
         }
 
-        private void _mHandleKitByOperationCode(complect kit, pril_zM application)
+        private void _mHandleComplectByOperationCode(complect complect, pril_zM application)
         {
             if (application.ko == 1)
             {
-                _mAddNewKit(application);
+                _mAddNewComplect(application);
             }
             else if (application.ko == 2)
             {
-                _mDeleteKit(kit);
+                _mDeleteComplect(complect);
             }
             else if (application.ko == 3)
             {
-                _mModifyKit(kit, application);
+                _mModifyComplect(complect, application);
             }
         }
 
-        private void _mAddNewKit(pril_zM application)
+        private void _mAddNewComplect(pril_zM application)
         {
             var nodeStr = application.kuda.ToString();
             var ind = nodeStr.IndexOf(",");
             var nodeEnd = ind >= 0 ? Convert.ToDecimal(nodeStr.Substring(ind + 1)) : 0;
 
-            var requiredKit = kitsList.Find(kit => kit.kuda == application.kuda);
-            if (requiredKit != null)
+            var requiredComplect = complectsList.Find(complect => complect.kuda == application.kuda);
+            if (requiredComplect != null)
             {
                 logAction($"ДД\tПозиция:{application.poz}\tЧертёж:{application.what}\tУзел:" +
                           $" {application.kuda}\tРСП: {application.spec}\tКСИ: {application.ksi}\t ko = 1 уже есть в сomplect", true);
                 return;
             }
 
-            kitsList.Add(
+            complectsList.Add(
                 new complect
                 {
                     posit = application.poz,
@@ -129,38 +153,38 @@ namespace FormationZakaz.Data
             addCount++;
         }
 
-        private void _mDeleteKit(complect kit)
+        private void _mDeleteComplect(complect complect)
         {
-            if (kit != null)
+            if (complect != null)
             {
-                kitsList.Remove(kit);
+                complectsList.Remove(complect);
                 delCount++;
             }
         }
 
-        private void _mModifyKit(complect kit, pril_zM application)
+        private void _mModifyComplect(complect complect, pril_zM application)
         {
-            if (kit != null)
+            if (complect != null)
             {
-                kit.quant = application.kol;
-                kit.spec = application.spec;
-                kit.path = application.path;
+                complect.quant = application.kol;
+                complect.spec = application.spec;
+                complect.path = application.path;
                 changeCount++;
             }
         }
 
         // Метод для проверки и вставки нового комплекта в базу данных
-        void _mCheckAndInsertKitToDB(pril_zM application)
+        void _mFindAndInsertComplectToDB(pril_zM application)
         {
-            var requiredKit = db.complect.FirstOrDefault(p => p.what == application.what);
-            if (application.ko != 2 && requiredKit == null)
+            var requiredComplect = db.complect.FirstOrDefault(p => p.what == application.what);
+            if (application.ko != 2 && requiredComplect == null)
             {
-                _mInsertKitToDB(application);
+                _mInsertComplectToDB(application);
             }
         }
 
         // Метод для вставки нового комплекта в базу данных
-        void _mInsertKitToDB(pril_zM application)
+        void _mInsertComplectToDB(pril_zM application)
         {
             db.AddObject(new complect
             {
@@ -201,20 +225,20 @@ namespace FormationZakaz.Data
             }
         }
 
-        List<complect> _mGetKitRecordsWithSecondGroup(pril_zM application)
+        List<complect> _mGetComplectRecordsWithSecondGroup(pril_zM application)
         {
-            var filtredKitsByNodeAndGroup = kitsList
+            var filtredComplectsByNodeAndGroup = complectsList
                 .Where(
-                    kit =>
-                    kit.kuda == application.kuda &&
-                    kit.group == 2
+                    complect =>
+                    complect.kuda == application.kuda &&
+                    complect.group == 2
                 )
                 .ToList();
-            return filtredKitsByNodeAndGroup;
+            return filtredComplectsByNodeAndGroup;
 
-            //if (filtredKitsByNodeAndGroup.Any())
+            //if (filtredComplectsByNodeAndGroup.Any())
             //{
-            //    _mHandleKitRecord(application, kitsList, intNode);
+            //    _mHandleComplectRecord(application, complectsList, intNode);
             //}
             //else
             //{
@@ -222,28 +246,28 @@ namespace FormationZakaz.Data
             //}
         }
 
-        complect _mGetKitRecordWithFirstGroup(pril_zM application)
+        complect _mGetComplectRecordWithFirstGroup(pril_zM application)
         {
             decimal intNode = decimal.Truncate(application.kuda);
 
-            var kitWithFirstGroup = kitsList
-                .OrderBy(kit => kit.spec)
+            var complectWithFirstGroup = complectsList
+                .OrderBy(complect => complect.spec)
                 .SingleOrDefault(
-                    kit =>
-                    kit.what == application.what &&
-                    kit.posit == application.poz &&
-                    kit.kuda == intNode &&
-                    kit.spec == application.spec &&
-                    kit.ksi == application.ksi &&
-                    kit.group == 1
+                    complect =>
+                    complect.what == application.what &&
+                    complect.posit == application.poz &&
+                    complect.kuda == intNode &&
+                    complect.spec == application.spec &&
+                    complect.ksi == application.ksi &&
+                    complect.group == 1
                 );
 
-            return kitWithFirstGroup;
+            return complectWithFirstGroup;
 
 
-            //if (kit != null)
+            //if (complect != null)
             //{
-            //    _mHandleKitByOperationCode(kit, application);
+            //    _mHandleComplectByOperationCode(complect, application);
             //}
             //else
             //{

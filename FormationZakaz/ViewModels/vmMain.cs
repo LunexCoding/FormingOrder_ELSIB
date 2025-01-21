@@ -59,7 +59,7 @@ namespace FormationZakaz.ViewModels
 
         public CommandBase pBtnCalc
         {
-            get { return BtnCalc ?? (BtnCalc = new CommandBase(_mBtnCalcWithFlag)); }
+            get { return BtnCalc ?? (BtnCalc = new CommandBase(mBtnCalcWithFlag)); }
         }
 
         
@@ -109,14 +109,14 @@ namespace FormationZakaz.ViewModels
         private CommandBase _LoadOrders;
         public CommandBase pLoadOrders
         {
-            get { return _LoadOrders ?? (_LoadOrders = new CommandBase(_mLoadOrders)); }
+            get { return _LoadOrders ?? (_LoadOrders = new CommandBase(mLoadOrders)); }
         }
 
 
         private CommandBase _CalcAllOrders;
         public CommandBase pCalcAllOrders
         {
-            get { return _CalcAllOrders ?? (_CalcAllOrders = new CommandBase(_mStartCalculation)); }
+            get { return _CalcAllOrders ?? (_CalcAllOrders = new CommandBase(mStartCalculation)); }
         }
 
         #endregion
@@ -131,8 +131,8 @@ namespace FormationZakaz.ViewModels
             _worker = new BackgroundWorker();
             _worker.WorkerReportsProgress = true;
             _worker.DoWork += _mWorker_DoWork;
-            _worker.ProgressChanged += _mWorker_ProgressChanged;
-            _worker.RunWorkerCompleted += _mWorker_RunWorkerCompleted;
+            _worker.ProgressChanged += mWorker_ProgressChanged;
+            _worker.RunWorkerCompleted += mWorker_RunWorkerCompleted;
         }
         /// <summary>
         /// Обработчик события загрузки View
@@ -163,7 +163,7 @@ namespace FormationZakaz.ViewModels
                 View.Top = View.Top - (View.Height - 600) / 2;
             }
 
-            _mLoadOrders();
+            mLoadOrders();
 
         }
 
@@ -186,7 +186,7 @@ namespace FormationZakaz.ViewModels
             }
             if ( _eventArgs.PropertyName == "pIsAllSelected")
             {
-                _mSetAllOrdersSelection(Model.pIsAllSelected);
+                mSetAllOrdersSelection(Model.pIsAllSelected);
             }
         }
 
@@ -2559,7 +2559,7 @@ namespace FormationZakaz.ViewModels
                return tfio;
            }
 
-        private void _mLoadOrders()
+        private void mLoadOrders()
         {
             if (Model.pIsAllSelected)
             {
@@ -2575,10 +2575,10 @@ namespace FormationZakaz.ViewModels
         }
 
         // Метод для старта вычислений
-        private void _mStartCalculation()
+        private void mStartCalculation()
         {
-            _mChangeProgressBarVisibility();
-            _mChangeAccessCommandElementsEnabled();
+            mChangeProgressBarVisibility();
+            mChangeAccessCommandElementsEnabled();
 
             if (!_worker.IsBusy)
             {
@@ -2627,31 +2627,31 @@ namespace FormationZakaz.ViewModels
         }
 
         // Обработчик для обновления прогресс-бара
-        private void _mWorker_ProgressChanged(object sender, ProgressChangedEventArgs e)
+        private void mWorker_ProgressChanged(object sender, ProgressChangedEventArgs e)
         {
             Model.pProgress = e.ProgressPercentage;
         }
 
 
         // Код, выполняемый после завершения задачи
-        private void _mWorker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
+        private void mWorker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
         {
-            _mChangeProgressBarVisibility();
-            _mChangeAccessCommandElementsEnabled();
+            mChangeProgressBarVisibility();
+            mChangeAccessCommandElementsEnabled();
         }
 
-        private void _mChangeProgressBarVisibility()
+        private void mChangeProgressBarVisibility()
         {
             Model.pIsProgressVisible = !Model.pIsProgressVisible;
         }
 
-        private void _mChangeAccessCommandElementsEnabled()
+        private void mChangeAccessCommandElementsEnabled()
         {
             Model.pAccessCommandElementsForOneOrder = !Model.pAccessCommandElementsForOneOrder;
             Model.pAccessCommandElementsForOrders = !Model.pAccessCommandElementsForOrders;
         }
 
-        private void _mSetAllOrdersSelection(bool isSelected)
+        private void mSetAllOrdersSelection(bool isSelected)
         {
             foreach (var order in Model.pOrders)
             {
@@ -2659,7 +2659,7 @@ namespace FormationZakaz.ViewModels
             }
         }
 
-        private void _mBtnCalcWithFlag()
+        private void mBtnCalcWithFlag()
         {
             mBtnCalc(true);
         }
@@ -2668,45 +2668,63 @@ namespace FormationZakaz.ViewModels
 
         #region new methods for CalcOutPro
 
-        private void _mFindOrderInOutpro()
+        private outpro mFindOrderInOutpro()
         {
-            
+            return Model.db.outpro.FirstOrDefault(
+                row =>
+                row.zakaz == Model.pTbOrder &&
+                row.nom == Model.pTbNumber
+            );
         }
 
-        private bool _mCheckOrderInOutpro()
+        private bool mIsOrderInOutpro(outpro order)
         {
-            return false;
+            outpro orderFrfomDB = Model.db.outpro.FirstOrDefault(
+                row =>
+                row.zakaz == order.zakaz &&
+                row.nom == order.nom
+            );
+            return orderFrfomDB != null;
         }
 
-
-        private void _mShowMsgBox()
+        private pl_god mFindOrderInPl_god()
         {
 
+            return Model.db.pl_god.FirstOrDefault(
+                row =>
+                row.zakaz == Model.pTbOrder &&
+                row.nom == Model.pTbNumber
+            );
         }
 
-        private void _mFindOrderInPl_god()
+        private bool mCheckOrderInPl_god(pl_god order)
         {
-
+            pl_god orderFrfomDB = Model.db.pl_god.FirstOrDefault(
+               row =>
+               row.zakaz == order.zakaz &&
+               row.nom == order.nom
+            );
+            return orderFrfomDB != null;
         }
 
-        private void _mCheckOrderInPl_god()
+        private bool mCheckOrderInProduct(pl_god order)
         {
-
+            decimal monthShipment = (decimal)order.m_otgr;
+            decimal yearhShipment = (decimal)order.g_otgr;
+            return (monthShipment == 0 && yearhShipment == 0);
         }
 
-        private void _mCheckOrderInProduct()
+        private bool mIsMainProduct(pl_god order)
         {
-
+            decimal tip = (decimal)order.tip;
+            Model.tip = tip.ToString();
+            return (tip == 1 || tip == 2 || tip == 3 || tip == 5);
         }
 
-        private void _mIsMainProduct()
+        private string mGetApplicationForOrder(pl_god order)
         {
-
-        }
-
-        private void _mHasApplication()
-        {
-
+            string application = order.npril.Trim();
+            return application;
         }
 
         #region new methods for replace GetPrilzAndKudaList
@@ -2850,7 +2868,7 @@ namespace FormationZakaz.ViewModels
         /// </summary>
         /// <param name="applicationsList">Список позиций приложения для проверки.</param>
         /// <param name="draft">Чертёж для сверки.</param>
-        /// <returns>Строка с описанием позиций, которых нет в общем виде.</returns>
+        /// <returns>Строка с описанием позиций, которых нет в общем виде.</returFns>
         private string _mGetPositionsNotInOut(List<pril_zM> applicationsList, decimal draft)
         {
             string result = "";
@@ -2919,15 +2937,15 @@ namespace FormationZakaz.ViewModels
         /// <summary>
         /// Метод для получения списка переменных частей (группа == 2).
         /// </summary>
-        /// <param name="kitsList">Список комплектующих.</param>
+        /// <param name="complectsList">Список комплектующих.</param>
         /// <returns>Список уникальных значений kuda (node/узел) для переменных частей.</returns>
-        private List<decimal>_mGetVariableParts(List<complect> kitsList)
+        private List<decimal>_mGetVariableParts(List<complect> complectsList)
         {
             return (
                 from
-                    kit in kitsList
+                    complect in complectsList
                 where 
-                    kit.@group == 2 select kit.kuda
+                    complect.@group == 2 select complect.kuda
             )
             .Distinct()
             .ToList();
@@ -2946,30 +2964,30 @@ namespace FormationZakaz.ViewModels
         /// <summary>
         /// Метод для добавления постоянной части в список, если такая еще не существует.
         /// </summary>
-        /// <param name="kitsList">Список комплектующих, в который будет добавлена постоянная часть.</param>
+        /// <param name="complectsList">Список комплектующих, в который будет добавлена постоянная часть.</param>
         /// <param name="item">Постоянная часть, которая может быть добавлена в список.</param>
-        private void _mAddConstantPartIfNotExist(List<complect> kitsList, complect item)
+        private void _mAddConstantPartIfNotExist(List<complect> complectsList, complect item)
         {
-            var existing = kitsList.Count(
-                kit =>
-                kit.format == item.format &&
-                kit.posit == item.posit &&
-                kit.what == item.what &&
-                kit.kuda == item.kuda &&
-                kit.quant == item.quant &&
-                kit.ed == item.ed &&
-                kit.group == item.group &&
-                kit.spec == item.spec &&
-                kit.ksi == item.ksi &&
-                kit.path == item.path &&
-                kit.izv == item.izv &&
-                kit.dti == item.dti &&
-                kit.tfl == item.tfl
+            var existing = complectsList.Count(
+                complect =>
+                complect.format == item.format &&
+                complect.posit == item.posit &&
+                complect.what == item.what &&
+                complect.kuda == item.kuda &&
+                complect.quant == item.quant &&
+                complect.ed == item.ed &&
+                complect.group == item.group &&
+                complect.spec == item.spec &&
+                complect.ksi == item.ksi &&
+                complect.path == item.path &&
+                complect.izv == item.izv &&
+                complect.dti == item.dti &&
+                complect.tfl == item.tfl
             );
 
             if (existing == 0)
             {
-                kitsList.Add(
+                complectsList.Add(
                     new complect
                     {
                         format = item.format,
@@ -2993,14 +3011,14 @@ namespace FormationZakaz.ViewModels
         /// <summary>
         /// Метод для добавления постоянных частей, если они соответствуют переменным частям в списке комплектующих.
         /// </summary>
-        /// <param name="kitsList">Список комплектующих, в который могут быть добавлены постоянные части.</param>
+        /// <param name="complectsList">Список комплектующих, в который могут быть добавлены постоянные части.</param>
         /// <returns>Обновленный список комплектующих с добавленными постоянными частями.</returns>
-        private List<complect> _mAddConstantPartIfNeeded(List<complect> kitsList)
+        private List<complect> _mAddConstantPartIfNeeded(List<complect> complectsList)
         {
-            var updatedKitsList = new List<complect>(kitsList);
+            var updatedComplectsList = new List<complect>(complectsList);
 
             // 1. Поиск переменных частей
-            var variableParts = _mGetVariableParts(updatedKitsList);
+            var variableParts = _mGetVariableParts(updatedComplectsList);
 
             // 2. Для каждой переменной части, проверяем и добавляем постоянную часть
             foreach (var node in variableParts)
@@ -3012,12 +3030,12 @@ namespace FormationZakaz.ViewModels
                     foreach (var item in constantParts)
                     {
                         // 3. Проверяем, не существует ли такая постоянная часть в списке, если нет, добавляем
-                        _mAddConstantPartIfNotExist(updatedKitsList, item);
+                        _mAddConstantPartIfNotExist(updatedComplectsList, item);
                     }
                 }
             }
 
-            return updatedKitsList;
+            return updatedComplectsList;
         }
 
         #endregion new methods for replace GetComplList

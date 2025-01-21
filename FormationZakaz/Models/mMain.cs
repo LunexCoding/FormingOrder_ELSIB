@@ -518,7 +518,7 @@ namespace FormationZakaz.Models
             foreach (var order in orders) 
             { 
                 // Проверяем наличие записи в outpro
-                outpro row = _mFindOrderInOutpro(order); 
+                outpro row = mFindOrderInOutpro(order); 
  
                 // Если запись найдена, пропускаем заказ
                 if (row != null) 
@@ -544,7 +544,7 @@ namespace FormationZakaz.Models
             } 
         }
 
-        private outpro _mFindOrderInOutpro(Order order)
+        private outpro mFindOrderInOutpro(Order order)
         {
             return db.outpro
                 .Where(outpro =>
@@ -553,6 +553,8 @@ namespace FormationZakaz.Models
                 )
                 .FirstOrDefault();
         }
+
+
         #endregion
     }
 }
