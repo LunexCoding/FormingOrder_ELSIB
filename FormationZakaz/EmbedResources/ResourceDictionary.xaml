@@ -228,7 +228,7 @@
 
     <!--Стиль для графиков-->
     <!--<Style x:Key="MyColumnDataPointStyle"
-         TargetType="{x:Type chartingToolkit:ColumnDataPoint}">
+         TargetType="{x:Type chartingToolcomplect:ColumnDataPoint}">
         <Setter Property="Background"
             Value="IndianRed" />
         <Setter Property="BorderBrush"
